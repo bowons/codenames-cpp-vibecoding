@@ -1,0 +1,53 @@
+# Build directories
+build/
+Debug/
+Release/
+*.exe
+*.lib
+*.obj
+*.o
+
+# IDE and editor files
+.vscode/
+.idea/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+CMakeUserPresets.json
+
+# CMake
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Dependencies
+vcpkg_installed/
+installed/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# System files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# Node modules (if any frontend)
+node_modules/
+package-lock.json
+
+# Environment files
+.env
+.env.local
