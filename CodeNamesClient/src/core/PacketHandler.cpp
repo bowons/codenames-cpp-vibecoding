@@ -25,16 +25,17 @@ void PacketHandler::RegisterDefaultHandlers() {
     RegisterHandler(PKT_LOGIN_SUSPENDED, [this](const std::string& data) { HandleError(data); });
     RegisterHandler(PKT_LOGIN_ERROR, [this](const std::string& data) { HandleError(data); });
     RegisterHandler(PKT_NICKNAME_EDIT_OK, [this](const std::string& data) { HandleError(data); });
-    RegisterHandler(PKT_NICK_DUPLICATE, [this](const std::string& data) { HandleError(data); });
+    RegisterHandler(PKT_SIGNUP_DUPLICATE, [this](const std::string& data) { HandleError(data); });
     RegisterHandler(PKT_NICKNAME_EDIT_ERROR, [this](const std::string& data) { HandleError(data); });
-    RegisterHandler(PKT_ID_TAKEN, [this](const std::string& data) { HandleError(data); });
-    RegisterHandler(PKT_ID_AVAILABLE, [this](const std::string& data) { HandleError(data); });
+    RegisterHandler(PKT_CHECK_ID_DUPLICATE, [this](const std::string& data) { HandleError(data); });
+    RegisterHandler(PKT_CHECK_ID_OK, [this](const std::string& data) { HandleError(data); });
 
     // 사용자 정보 패킷 (TCP)
-    RegisterHandler(PKT_NICKNAME, [this](const std::string& data) { HandleUserProfile(data); });
+    // server sends TOKEN_VALID|nickname for validated tokens / profile info
+    RegisterHandler(PKT_TOKEN_VALID, [this](const std::string& data) { HandleUserProfile(data); });
     RegisterHandler(PKT_INVALID_TOKEN, [this](const std::string& data) { HandleInvalidToken(data); });
-    RegisterHandler(PKT_NICKNAME_TAKEN, [this](const std::string& data) { HandleError(data); });
-    RegisterHandler(PKT_NICKNAME_AVAILABLE, [this](const std::string& data) { HandleError(data); });
+    RegisterHandler(PKT_SIGNUP_DUPLICATE, [this](const std::string& data) { HandleError(data); });
+    RegisterHandler(PKT_NICKNAME_EDIT_OK, [this](const std::string& data) { HandleError(data); });
 
     // 게임 프로토콜 패킷
     RegisterHandler(PKT_WAIT_REPLY, [this](const std::string& data) { HandleWaitReply(data); });
@@ -120,7 +121,7 @@ void PacketHandler::HandleSignupOk(const std::string& data) {
     std::string token = ParseField(data, 0, "|");
     if (!token.empty()) {
         gameState_->token = token;
-        gameState_->currentPhase = GamePhase::LOBBY;
+        gameState_->SetPhase(GamePhase::LOBBY);
         std::cout << "Signup successful. Token: " << token << std::endl;
     }
 }
@@ -130,30 +131,26 @@ void PacketHandler::HandleLoginOk(const std::string& data) {
     std::string token = ParseField(data, 0, "|");
     if (!token.empty()) {
         gameState_->token = token;
-        gameState_->currentPhase = GamePhase::LOBBY;
+        gameState_->SetPhase(GamePhase::LOBBY);
         std::cout << "Login successful. Token: " << token << std::endl;
     }
 }
 
 void PacketHandler::HandleInvalidToken(const std::string& data) {
     // INVALID_TOKEN
-    gameState_->currentPhase = GamePhase::ERROR_PHASE;
+    gameState_->SetPhase(GamePhase::ERROR_PHASE);
     std::cout << "Invalid token. Please login again." << std::endl;
 }
 
 // ==================== 사용자 정보 패킷 핸들러 ====================
 
 void PacketHandler::HandleUserProfile(const std::string& data) {
-    // NICKNAME|nickname|WINS|wins|LOSSES|losses
+    // TOKEN_VALID|nickname  (server currently sends TOKEN_VALID with nickname)
     std::string nickname = ParseField(data, 0, "|");
-    std::string winsStr = ParseField(data, 2, "|");
-    std::string lossesStr = ParseField(data, 4, "|");
 
-    if (!nickname.empty() && !winsStr.empty() && !lossesStr.empty()) {
+    if (!nickname.empty()) {
         gameState_->username = nickname;
-        std::cout << "User profile: " << nickname 
-                 << " | Wins: " << winsStr 
-                 << " | Losses: " << lossesStr << std::endl;
+        std::cout << "User profile: " << nickname << std::endl;
     }
 }
 
@@ -254,8 +251,8 @@ void PacketHandler::HandleTurnUpdate(const std::string& data) {
     std::string blueStr = ParseField(data, 3, "|");
     
     if (!teamStr.empty() && !redStr.empty() && !blueStr.empty()) {
-        gameState_->SetTurn(std::stoi(teamStr));
-        gameState_->currentPhase_ = std::stoi(phaseStr);
+    gameState_->SetTurn(std::stoi(teamStr));
+    gameState_->inGameStep = std::stoi(phaseStr);
         gameState_->UpdateScore(std::stoi(redStr), std::stoi(blueStr));
     }
 }
@@ -306,6 +303,6 @@ void PacketHandler::HandleChatMsg(const std::string& data) {
 
 void PacketHandler::HandleError(const std::string& data) {
     // ERROR
-    gameState_->currentPhase = GamePhase::ERROR_PHASE;
+    gameState_->SetPhase(GamePhase::ERROR_PHASE);
     std::cout << "Server error occurred" << std::endl;
 }

@@ -2,6 +2,9 @@
 #include <memory>
 #include <chrono>
 #include <thread>
+#include <mutex>
+#include <deque>
+#include <functional>
 #include "../include/gui/GUIManager.h"
 #include "../include/core/IOCPClient.h"
 #include "../include/core/PacketHandler.h"
@@ -12,26 +15,49 @@ std::shared_ptr<GUIManager> g_guiManager = nullptr;
 std::shared_ptr<PacketHandler> g_packetHandler = nullptr;
 std::shared_ptr<GameState> g_gameState = nullptr;
 
+// Thread-safe packet queue: network thread pushes, GUI/main thread consumes
+std::mutex g_packetQueueMutex;
+std::deque<std::string> g_packetQueue;
+
+// Main-thread task queue for marshalling network callbacks to GUI thread
+std::mutex g_mainTasksMutex;
+std::deque<std::function<void()>> g_mainTasks;
+
 // 네트워크 데이터 수신 콜백
 void OnNetworkDataReceived(const std::string& packetData) {
-    if (g_packetHandler) {
-        g_packetHandler->ProcessPacket(packetData);
+    // Enqueue packet for processing on the main (GUI) thread to avoid
+    // race conditions between network thread and UI thread.
+    {
+        std::lock_guard<std::mutex> lock(g_packetQueueMutex);
+        g_packetQueue.push_back(packetData);
     }
 }
 
 // 네트워크 연결 상태 콜백
 void OnNetworkConnected() {
     std::cout << "[Network] Connected to server!" << std::endl;
-    if (g_gameState) {
-        g_gameState->SetPhase(GamePhase::LOBBY);
+    // Enqueue a main-thread task so GameState is modified on GUI thread
+    {
+        std::lock_guard<std::mutex> lock(g_mainTasksMutex);
+        g_mainTasks.push_back([]() {
+            if (g_gameState) {
+                g_gameState->SetPhase(GamePhase::LOBBY);
+            }
+        });
     }
 }
 
 // 네트워크 연결 해제 콜백
 void OnNetworkDisconnected() {
     std::cout << "[Network] Disconnected from server!" << std::endl;
-    if (g_gameState) {
-        g_gameState->SetPhase(GamePhase::ERROR_PHASE);
+    // Enqueue a main-thread task to update GameState safely
+    {
+        std::lock_guard<std::mutex> lock(g_mainTasksMutex);
+        g_mainTasks.push_back([]() {
+            if (g_gameState) {
+                g_gameState->SetPhase(GamePhase::ERROR_PHASE);
+            }
+        });
     }
 }
 
@@ -89,8 +115,8 @@ int main(int argc, char* argv[]) {
         // 연결 안정화를 위해 잠깐 대기
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-        // 7️⃣ GUIManager 생성 (UI 관리)
-        g_guiManager = std::make_unique<GUIManager>();
+    // 7️⃣ GUIManager 생성 (UI 관리) - 공유된 GameState를 전달
+    g_guiManager = std::make_unique<GUIManager>(g_gameState);
         g_guiManager->SetNetworkClient(client);
         std::cout << "[GUIManager] Initialized" << std::endl;
 

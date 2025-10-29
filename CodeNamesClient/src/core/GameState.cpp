@@ -9,7 +9,7 @@ GameState::GameState()
       isMyLeader(false),
       sessionId(-1),
       currentTurn(0),
-      currentPhase_(0),
+    inGameStep(0),
       redScore(0),
       blueScore(0),
       hintNumber(0) {
@@ -64,7 +64,7 @@ void GameState::AddMessage(const GameMessage& msg) {
 void GameState::RevealCard(int cardIndex) {
     if (cardIndex >= 0 && cardIndex < static_cast<int>(cards.size())) {
         cards[cardIndex].isRevealed = true;
-        NotifyCardRevealed();
+        NotifyCardRevealed(cardIndex);
     }
 }
 
@@ -120,9 +120,9 @@ void GameState::NotifyHintReceived() {
     }
 }
 
-void GameState::NotifyCardRevealed() {
+void GameState::NotifyCardRevealed(int cardIndex) {
     for (auto& observer : observers_) {
-        if (observer) observer->OnCardRevealed(-1);
+        if (observer) observer->OnCardRevealed(cardIndex);
     }
 }
 
@@ -156,7 +156,7 @@ void GameState::Reset() {
     players.clear();
     cards.clear();
     currentTurn = 0;
-    currentPhase_ = 0;
+    inGameStep = 0;
     redScore = 0;
     blueScore = 0;
     hintWord.clear();

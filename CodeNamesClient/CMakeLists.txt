@@ -15,6 +15,13 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 # 소스 파일 추가
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
+# Exclude duplicate or backup sources that end with _2.cpp to avoid conflicting definitions
+foreach(_src ${SOURCES})
+    if(_src MATCHES "_2\\.cpp$")
+        list(REMOVE_ITEM SOURCES ${_src})
+    endif()
+endforeach()
+
 # 실행 파일 생성
 add_executable(${PROJECT_NAME} ${SOURCES})
 

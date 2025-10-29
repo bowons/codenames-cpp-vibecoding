@@ -1,8 +1,10 @@
 #include "Session.h"
 #include "NetworkManager.h"
 #include "SessionManager.h"
+#include "GameManager.h"
 #include "DatabaseManager.h"
 #include "IOCPServer.h"
+#include "PacketProtocol.h"
 
 #include <iostream>
 #include <ws2tcpip.h>
@@ -173,10 +175,15 @@ void Session::ProcessRecv(size_t bytesTransferred) {
             break;
             
         case SessionState::IN_GAME:
-            // GameManager에 위임 (추후 구현)
-            // TODO: GameManager 구현 후 활성화
-            std::cout << "[GAME] 패킷 처리 (미구현): " << receivedData << std::endl;
-            PostSend("GAME_NOT_IMPLEMENTED");
+            // GameManager에 위임
+            if (auto gm = GetGameManager()) {
+                // 실제 게임 로직이 구현된 GameManager가 있으면 전달
+                gm->HandleGamePacket(this, receivedData);
+            } else {
+                // GameManager가 할당되지 않은 경우(예: 아직 매칭 미완료 등)
+                std::cout << "[GAME] 패킷 처리: GameManager 미할당 - " << receivedData << std::endl;
+                PostSend(PKT_GAME_NOT_IMPLEMENTED);
+            }
             break;
             
         default:

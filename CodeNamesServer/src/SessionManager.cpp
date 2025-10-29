@@ -1,4 +1,5 @@
 #include "SessionManager.h"
+#include "PacketProtocol.h"
 #include "Session.h"
 #include "DatabaseManager.h"
 #include "GameManager.h"
@@ -8,9 +9,9 @@
 #include <ctime>
 #include "IOCPServer.h"
 
-SessionManager::SessionManager(IOCPServer* server) : server_(server), sessionCount_(0) {
+SessionManager::SessionManager(IMediator* server) : server_(server), sessionCount_(0) {
     if (!server_) {
-        throw std::runtime_error("SessionManager: IOCPServer pointer cannot be null");
+        throw std::runtime_error("SessionManager: IMediator pointer cannot be null");
     }
 }
 
@@ -215,9 +216,9 @@ void SessionManager::DisconnectAll() {
 void SessionManager::HandleLobbyPacket(Session* session, const std::string& data) {
     std::cout << "[SessionManager] 로비 패킷 처리: " << data << std::endl;
     
-    if (data.find("CMD|QUERY_WAIT|") == 0) // CMD|QUERY_WAIT|{token} - 매칭 대기 요청
+    if (data.find(std::string(PKT_CMD_QUERY_WAIT) + "|") == 0) // CMD|QUERY_WAIT|{token} - 매칭 대기 요청
     {
-        std::string token = data.substr(15);
+        std::string token = data.substr(std::string(PKT_CMD_QUERY_WAIT).size() + 1);
 
         if (token == session->GetToken()) 
         { // 매칭 큐에 추가
@@ -231,10 +232,10 @@ void SessionManager::HandleLobbyPacket(Session* session, const std::string& data
                     gameThread.detach();  // 스레드를 detach하여 독립적으로 실행
 
                     for (auto& player : waitingPlayers) {
-                        player->PostSend("QUEUE_FULL"); 
+                        player->PostSend(PKT_QUEUE_FULL);
                     }
                 } else {
-                    std::string waitMsg = "WAIT_REPLY|" + std::to_string(waitingPlayers.size()) + "|" + std::to_string(GameManager::MAX_PLAYERS);
+                    std::string waitMsg = std::string(PKT_WAIT_REPLY) + "|" + std::to_string(waitingPlayers.size()) + "|" + std::to_string(GameManager::MAX_PLAYERS);
                 
                     // 대기자에게 현재 상황 전송
                     for (auto& player : waitingPlayers) {
@@ -242,32 +243,32 @@ void SessionManager::HandleLobbyPacket(Session* session, const std::string& data
                     }
                 }
             } else {
-                session->PostSend("QUEUE_ERROR");
+                session->PostSend(PKT_QUEUE_ERROR);
             }
         } else {
-            session->PostSend("INVALID_TOKEN");
+            session->PostSend(PKT_INVALID_TOKEN);
         }
-    } else if (data.find("SESSION_READY|") == 0) {
-        std::string token = data.substr(14);
+    } else if (data.find(std::string(PKT_SESSION_READY) + "|") == 0) {
+        std::string token = data.substr(std::string(PKT_SESSION_READY).size() + 1);
 
         if(token == session->GetToken()) {
-            session->PostSend("SESSION_ACK");
+            session->PostSend(PKT_SESSION_ACK);
         } else {
-            session->PostSend("SESSION_NOT_FOUND");
+            session->PostSend(PKT_SESSION_NOT_FOUND);
         }
-    } else if (data.find("MATCHING_CANCEL|") == 0) {
+    } else if (data.find(std::string(PKT_MATCHING_CANCEL) + "|") == 0) {
         // MATCHING_CANCEL|{token} - 매칭 취소
-        std::string token = data.substr(16);
+        std::string token = data.substr(std::string(PKT_MATCHING_CANCEL).size() + 1);
         if (token == session->GetToken()) {
             RemoveFromMatchingQueue(session->shared_from_this());
-            session->PostSend("CANCEL_OK");
+            session->PostSend(PKT_CANCEL_OK);
         } else {
-            session->PostSend("CANCEL_OK");
+            session->PostSend(PKT_CANCEL_OK);
         }
     }
     else {
         std::cerr << "Unknown lobby packet: " << data << std::endl;
-        session->PostSend("LOBBY_ERROR|UNKNOWN_PACKET");
+        session->PostSend(PKT_LOBBY_ERROR_UNKNOWN);
     }
 }
 
@@ -275,22 +276,22 @@ void SessionManager::HandleLobbyPacket(Session* session, const std::string& data
 void SessionManager::HandleAuthProtocol(Session* session, const std::string& data) {
     std::cout << "[SessionManager] 인증 패킷 처리: " << data << std::endl;
     
-    if(data.find("CHECK_ID|") == 0) 
+    if(data.find(std::string(PKT_CHECK_ID) + "|") == 0) 
     {
         // CHECK_ID|{id} - ID 중복 검사
-        std::string id = data.substr(9);
+        std::string id = data.substr(std::string(PKT_CHECK_ID).size() + 1);
 
         if (auto dbManager = session->GetDatabaseManager()) {
             if (dbManager->CheckIdExists(id)) {
-                session->PostSend("CHECK_ID_DUPLICATE");
+                session->PostSend(PKT_CHECK_ID_DUPLICATE);
             } else {
-                session->PostSend("CHECK_ID_OK");
+                session->PostSend(PKT_CHECK_ID_OK);
             }
         } else {
-            session->PostSend("CHECK_ID_ERROR");
+            session->PostSend(PKT_CHECK_ID_ERROR);
         }
         
-    } else if (data.find("SIGNUP|") == 0)
+    } else if (data.find(std::string(PKT_SIGNUP) + "|") == 0)
     {
         // SIOGNUP|{id}|{password}|{nickname} - 회원가입
         size_t first_pipe = data.find('|', 7);
@@ -308,24 +309,24 @@ void SessionManager::HandleAuthProtocol(Session* session, const std::string& dat
                     std::string token = dbManager->GenerateToken();
                     session->SetToken(token);
                     session->SetUserName(nick);
-                    session->PostSend("SIGNUP_OK|" + token);
+                    session->PostSend(std::string(PKT_SIGNUP_OK) + "|" + token);
                 } else if (result == DatabaseResult::NICK_DUPLICATE) {
-                    session->PostSend("SIGNUP_DUPLICATE");
+                    session->PostSend(PKT_SIGNUP_DUPLICATE);
                 } else {
-                    session->PostSend("SIGNUP_ERROR");
+                    session->PostSend(PKT_SIGNUP_ERROR);
                 }
             } else {
-                session->PostSend("SIGNUP_ERROR");
+                session->PostSend(PKT_SIGNUP_ERROR);
             }
         } else {
-            session->PostSend("SIGNUP_ERROR");
+            session->PostSend(PKT_SIGNUP_ERROR);
         }
-    } else if (data.find("LOGIN|") == 0) {
+    } else if (data.find(std::string(PKT_LOGIN) + "|") == 0) {
         // LOGIN|{id}|{pw} - 로그인
-        size_t pipe_pos = data.find('|', 6);
+        size_t pipe_pos = data.find('|', std::string(PKT_LOGIN).size() + 1);
 
         if (pipe_pos != std::string::npos) {
-            std::string id = data.substr(6, pipe_pos - 6);
+            std::string id = data.substr(std::string(PKT_LOGIN).size() + 1, pipe_pos - (std::string(PKT_LOGIN).size() + 1));
             std::string pw = data.substr(pipe_pos + 1);
             if (auto dbManager = session->GetDatabaseManager()) {
                 DatabaseResult result = dbManager->LoginUser(id, pw);
@@ -339,56 +340,56 @@ void SessionManager::HandleAuthProtocol(Session* session, const std::string& dat
                         std::string token = dbManager->GenerateToken();
                         session->SetToken(token);
                         session->SetUserName(userInfo->nickname);
-                        session->PostSend("LOGIN_OK|" + token);
+                        session->PostSend(std::string(PKT_LOGIN_OK) + "|" + token);
                         session->SetState(SessionState::IN_LOBBY);
                     } else {
-                        session->PostSend("LOGIN_ERROR");
+                        session->PostSend(PKT_LOGIN_ERROR);
                     }
                 } else if (result == DatabaseResult::NOT_FOUND) {
-                    session->PostSend("LOGIN_NO_ACCOUNT");
+                    session->PostSend(PKT_LOGIN_NO_ACCOUNT);
                 } else if (result == DatabaseResult::WRONG_PASSWORD) {
-                    session->PostSend("LOGIN_WRONG_PW");
+                    session->PostSend(PKT_LOGIN_WRONG_PW);
                 } else if (result == DatabaseResult::SUSPENDED) {
-                    session->PostSend("LOGIN_SUSPENDED");
+                    session->PostSend(PKT_LOGIN_SUSPENDED);
                 } else {
-                    session->PostSend("LOGIN_ERROR");
+                    session->PostSend(PKT_LOGIN_ERROR);
                 }
             } else {
-                session->PostSend("LOGIN_ERROR");
+                session->PostSend(PKT_LOGIN_ERROR);
             }
         } else {
-            session->PostSend("LOGIN_ERROR");
+            session->PostSend(PKT_LOGIN_ERROR);
         } 
-    } else if (data.find("TOKEN|") == 0) 
+    } else if (data.find(std::string(PKT_TOKEN) + "|") == 0) 
     {
-        std::string token = data.substr(6);
+        std::string token = data.substr(std::string(PKT_TOKEN).size() + 1);
 
         if (token == session->GetToken()) {
-            session->PostSend("TOKEN_VALID|" + session->GetUserName());
+            session->PostSend(std::string(PKT_TOKEN_VALID) + "|" + session->GetUserName());
         } else {
-            session->PostSend("INVALID_TOKEN");
+            session->PostSend(PKT_INVALID_TOKEN);
         }
-    } else if (data.find("EDIT_NICK|") == 0)
+    } else if (data.find(std::string(PKT_EDIT_NICK) + "|") == 0)
     {
         // EDIT_NICK|{token}|{new_nick} - 닉네임 수정
-        size_t pipe_pos = data.find('|', 10);
+        size_t pipe_pos = data.find('|', std::string(PKT_EDIT_NICK).size() + 1);
         
         if (pipe_pos != std::string::npos) {
-            std::string token = data.substr(10, pipe_pos - 10);
+            std::string token = data.substr(std::string(PKT_EDIT_NICK).size() + 1, pipe_pos - (std::string(PKT_EDIT_NICK).size() + 1));
             std::string new_nick = data.substr(pipe_pos + 1);
             
             if (token == session->GetToken()) {
                 session->SetUserName(new_nick);
-                session->PostSend("NICKNAME_EDIT_OK");
+                session->PostSend(PKT_NICKNAME_EDIT_OK);
             } else {
-                session->PostSend("INVALID_TOKEN");
+                session->PostSend(PKT_INVALID_TOKEN);
             }
         } else {
-            session->PostSend("NICKNAME_EDIT_ERROR");
+            session->PostSend(PKT_NICKNAME_EDIT_ERROR);
         }
     } else 
     {
         std::cerr << "Unknown auth packet: " << data << std::endl;
-        session->PostSend("AUTH_ERROR|UNKNOWN_PACKET");
+        session->PostSend(PKT_AUTH_ERROR_UNKNOWN);
     }
 }

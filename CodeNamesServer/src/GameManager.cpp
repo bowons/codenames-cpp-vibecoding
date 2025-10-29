@@ -5,6 +5,7 @@
 
 #include "GameManager.h"
 #include "Session.h"
+#include "PacketProtocol.h"
 
 GameManager::GameManager(const std::string &roomId)
     : roomId_(roomId), currentTurn_(Team::RED), currentPhase_(GamePhase::HINT_PHASE),
@@ -42,7 +43,7 @@ GameManager::~GameManager() {
         BroadcastGameSystemMessage("예기치 못하게 게임이 종료되었습니다. (서버 종료)");
 
         // 강제 종료 시에는 승자 없음 (-1)
-        BroadcastToAll("GAME_OVER|-1");
+        BroadcastToAll(std::string(PKT_GAME_OVER) + "|-1");
     }
 
     for (int i = 0; i < MAX_PLAYERS; ++i) {
@@ -254,7 +255,7 @@ void GameManager::AssignCards() {
 void GameManager::SendAllCards(Session* session) {
     std::lock_guard<std::mutex> lock(gameMutex_);
 
-    std::string cardsMsg = "ALL_CARDS";
+    std::string cardsMsg = std::string(PKT_ALL_CARDS);
     for (int i = 0; i < MAX_CARDS; ++i) {
         std::string entry = "|" + cards_[i].word + 
                            "|" + std::to_string((int)cards_[i].type) + 
@@ -281,7 +282,7 @@ void GameManager::SendCardUpdate(int cardIndex) {
 
     std::lock_guard<std::mutex> lock(gameMutex_);
 
-    std::string updateMsg = "CARD_UPDATE|" + std::to_string(cardIndex) +
+    std::string updateMsg = std::string(PKT_CARD_UPDATE) + "|" + std::to_string(cardIndex) +
                             "|" + std::to_string(cards_[cardIndex].isUsed ? 1 : 0);
 
     BroadcastToAll(updateMsg);
@@ -304,7 +305,7 @@ void GameManager::BroadcastToAll(const std::string& message) {
 }
 
 void GameManager::BroadcastGameSystemMessage(const std::string& message) {
-    std::string systemMsg = "CHAT|" + std::to_string((int)Team::SYSTEM) + "|0|SYSTEM|" + message;
+    std::string systemMsg = std::string(PKT_CHAT) + "|" + std::to_string((int)Team::SYSTEM) + "|0|SYSTEM|" + message;
     BroadcastToAll(systemMsg);
 }
 
@@ -318,7 +319,7 @@ void GameManager::SendGameInit() {
 void GameManager::SendGameState() {
     std::lock_guard<std::mutex> lock(gameMutex_);
 
-    std::string stateMsg = "TURN_UPDATE|" + 
+    std::string stateMsg = std::string(PKT_TURN_UPDATE) + "|" + 
                           std::to_string((int)currentTurn_) + "|" +
                           std::to_string((int)currentPhase_) + "|" +
                           std::to_string(redScore_) + "|" +
@@ -332,7 +333,7 @@ void GameManager::SendGameState() {
 }
 
 std::string GameManager::CreateGameInitMessage() {
-    std::string msg = "GAME_INIT";
+    std::string msg = std::string(PKT_GAME_INIT);
 
     for (int i = 0; i < MAX_PLAYERS; ++i) {
         if (players_[i].session) {
@@ -342,7 +343,7 @@ std::string GameManager::CreateGameInitMessage() {
                                 "|" + (players_[i].role == PlayerRole::SPYMASTER ? "1" : "0");  
             msg += entry;
         } else {
-            std::string entry = "|EMPTY|" + std::to_string(i) + 
+            std::string entry = "|" + std::string(PKT_EMPTY) + "|" + std::to_string(i) + 
                                "|" + std::to_string((i < 3) ? 0 : 1) +
                                "|" + std::to_string((i == 0 || i == 3) ? 1 : 0);
             msg += entry;
@@ -379,7 +380,7 @@ void GameManager::SwitchTurn() {
     std::cout << "[" << roomId_ << "] 턴 전환: " 
               << (currentTurn_ == Team::RED ? "RED" : "BLUE") << "팀" << std::endl;
 
-    std::string turnMsg = "TURN_UPDATE|" + 
+    std::string turnMsg = std::string(PKT_TURN_UPDATE) + "|" + 
                         std::to_string((int)currentTurn_) + "|" +
                         std::to_string((int)currentPhase_) + "|" +
                         std::to_string(redScore_) + "|" +
@@ -399,7 +400,7 @@ void GameManager::SwitchPhase() {
         std::cout << "[" << roomId_ << "] 단계 전환: 힌트 단계" << std::endl;
     }
 
-    std::string phaseMsg = "TURN_UPDATE|" +
+    std::string phaseMsg = std::string(PKT_TURN_UPDATE) + "|" +
                         std::to_string((int)currentTurn_) + "|" +
                         std::to_string((int)currentPhase_) + "|" +
                         std::to_string(redScore_) + "|" +
@@ -418,7 +419,7 @@ bool GameManager::ProcessHint(int playerIndex, const std::string& word, int numb
     hintCount_ = number;
     remainingTries_ = number;
 
-    std::string hintMsg = "HINT|" + std::to_string((int)currentTurn_) + "|" + word + "|" + std::to_string(number);
+    std::string hintMsg = std::string(PKT_HINT_MSG) + "|" + std::to_string((int)currentTurn_) + "|" + word + "|" + std::to_string(number);
     BroadcastToAll(hintMsg);
 
     SwitchPhase();
@@ -440,8 +441,8 @@ bool GameManager::ProcessAnswer(int playerIndex, const std::string& word) {
     }
 
     if (cardIndex == -1) {
-        // 잘못된 단어 - 해당 플레이어에게만 고지함
-        players_[playerIndex].session->PostSend("ANSWER_RESULT|INVALID|" + word);
+    // 잘못된 단어 - 해당 플레이어에게만 고지함
+    players_[playerIndex].session->PostSend(std::string(PKT_ANSWER_RESULT) + "|INVALID|" + word);
         return false;
     }
 
@@ -459,34 +460,34 @@ bool GameManager::ProcessAnswer(int playerIndex, const std::string& word) {
         redScore_++;
         if (currentTurn_ == Team::RED) {
             remainingTries_--;
-            chatMsg = "CHAT|2|0|시스템|" + playerName + "님이 RED 카드를 선택! (+1점)";
+            chatMsg = std::string(PKT_CHAT) + "|2|0|시스템|" + playerName + "님이 RED 카드를 선택! (+1점)";
             if (remainingTries_ <= 0) turnEnds = true;
         } else {
             turnEnds = true;
-            chatMsg = "CHAT|2|0|시스템|" + playerName + "님이 RED 카드를 선택! 턴 종료.";
+            chatMsg = std::string(PKT_CHAT) + "|2|0|시스템|" + playerName + "님이 RED 카드를 선택! 턴 종료.";
         }
     } else if (cardType == CardType::BLUE) {
         blueScore_++;
         if (currentTurn_ == Team::BLUE) {
             remainingTries_--;
-            chatMsg = "CHAT|2|0|시스템|" + playerName + "님이 BLUE 카드를 선택! (+1점)";
+            chatMsg = std::string(PKT_CHAT) + "|2|0|시스템|" + playerName + "님이 BLUE 카드를 선택! (+1점)";
             if (remainingTries_ <= 0) turnEnds = true;
         } else {
             turnEnds = true;
-            chatMsg = "CHAT|2|0|시스템|" + playerName + "님이 BLUE 카드를 선택! 턴 종료.";
+            chatMsg = std::string(PKT_CHAT) + "|2|0|시스템|" + playerName + "님이 BLUE 카드를 선택! 턴 종료.";
         }
     } else if (cardType == CardType::NEUTRAL) {
         if (currentTurn_ == Team::RED) {
             blueScore_++;
-            chatMsg = "CHAT|2|0|시스템|" + playerName + "님이 중립 카드를 선택! BLUE팀 +1점, 턴 종료.";
+            chatMsg = std::string(PKT_CHAT) + "|2|0|시스템|" + playerName + "님이 중립 카드를 선택! BLUE팀 +1점, 턴 종료.";
         } else {
             redScore_++;
-            chatMsg = "CHAT|2|0|시스템|" + playerName + "님이 중립 카드를 선택! RED팀 +1점, 턴 종료.";
+            chatMsg = std::string(PKT_CHAT) + "|2|0|시스템|" + playerName + "님이 중립 카드를 선택! RED팀 +1점, 턴 종료.";
         }
         turnEnds = true;
     } else if (cardType == CardType::ASSASSIN) {
         gameEnds = true;
-        chatMsg = "CHAT|2|0|시스템|" + playerName + "님이 암살자를 선택! 게임 종료.";
+    chatMsg = std::string(PKT_CHAT) + "|2|0|시스템|" + playerName + "님이 암살자를 선택! 게임 종료.";
     }
     BroadcastToAll(chatMsg);
 
@@ -514,11 +515,11 @@ bool GameManager::ProcessChat(int playerIndex, const std::string &message)
     std::string playerName = players_[playerIndex].GetNickname();
     Team playerTeam = players_[playerIndex].team;
 
-        std::string chatMsg = "CHAT|" + 
-                         std::to_string((int)playerTeam) + "|" + 
-                         std::to_string(playerIndex) + "|" + 
-                         playerName + "|" + 
-                         message;
+        std::string chatMsg = std::string(PKT_CHAT) + "|" + 
+                             std::to_string((int)playerTeam) + "|" + 
+                             std::to_string(playerIndex) + "|" + 
+                             playerName + "|" + 
+                             message;
 
     BroadcastToAll(chatMsg);
 
@@ -550,7 +551,7 @@ void GameManager::EndGame(Team winner)
                             (winner == Team::BLUE) ? "BLUE" : "DRAW";
     BroadcastGameSystemMessage(winnerName + "팀이 승리했습니다!");
 
-    std::string gameOverMsg = "GAME_OVER|" + std::to_string((int)winner);
+    std::string gameOverMsg = std::string(PKT_GAME_OVER) + "|" + std::to_string((int)winner);
     BroadcastToAll(gameOverMsg);
 
     for (int i = 0; i < MAX_PLAYERS; ++i) {
@@ -599,8 +600,8 @@ void GameManager::HandleGamePacket(Session* session, const std::string& data)
         return;
     }
     
-    if (data.find("HINT|") == 0) { // "HINT|단어|숫자"
-        std::string params = data.substr(5);
+    if (data.find(std::string(PKT_HINT_MSG) + "|") == 0) { // "HINT|단어|숫자"
+        std::string params = data.substr(std::string(PKT_HINT_MSG).size() + 1);
         
         size_t pos = params.find('|');
         if (pos != std::string::npos) {
@@ -614,11 +615,11 @@ void GameManager::HandleGamePacket(Session* session, const std::string& data)
                 std::cerr << "HandleGamePacket: 숫자 파싱 오류: " << numberStr << std::endl;
             }
         }
-    } else if (data.find("ANSWER|") == 0) { // "ANSWER|단어"
-        std::string word = data.substr(7);
+    } else if (data.find(std::string(PKT_ANSWER) + "|") == 0) { // "ANSWER|단어"
+        std::string word = data.substr(std::string(PKT_ANSWER).size() + 1);
         ProcessAnswer(playerIndex, word);
-    } else if (data.find("CHAT|") == 0) { // "CHAT|메시지"
-        std::string message = data.substr(5);
+    } else if (data.find(std::string(PKT_CHAT) + "|") == 0) { // "CHAT|메시지"
+        std::string message = data.substr(std::string(PKT_CHAT).size() + 1);
         ProcessChat(playerIndex, message);
     } else {
         std::cerr << "HandleGamePacket: 알 수 없는 패킷 타입: " << data << std::endl;

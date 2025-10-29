@@ -24,6 +24,9 @@ public:
     void OnTurnChanged(int team) override;
     void OnGameOver() override;
 
+    // 네트워크 클라이언트 설정(런타임에 변경 가능)
+    void SetClient(std::shared_ptr<IOCPClient> client) { client_ = client; }
+
 private:
     std::shared_ptr<GameState> gameState_;
     std::shared_ptr<IOCPClient> client_;

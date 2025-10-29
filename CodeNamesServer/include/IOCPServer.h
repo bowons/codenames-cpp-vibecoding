@@ -1,9 +1,9 @@
 #pragma once
 
 #define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <Windows.h>
 #include <memory>
 #include <vector>
 #include <thread>
@@ -12,7 +12,9 @@
 #include <iostream>
 #include <unordered_map>
 
-class IOCPServer {
+#include "IMediator.h"
+
+class IOCPServer : public IMediator {
 public:
     static constexpr int BUFFER_SIZE = 256;
     static constexpr int MAX_CLIENTS = 64;

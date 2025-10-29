@@ -242,6 +242,8 @@ void IOCPClient::WorkerThread() {
                 break;
             }
             std::cerr << "GetQueuedCompletionStatus failed: " << err << std::endl;
+            // Ensure proper disconnect handling
+            Disconnect();
             break;
         }
 
@@ -256,6 +258,8 @@ void IOCPClient::WorkerThread() {
             if (byteTransferred == 0) {
                 // 원격이 연결 종료
                 std::cout << "Remote closed connection" << std::endl;
+                // Ensure proper disconnect handling (will call onDisconnected)
+                Disconnect();
                 delete context;
                 break;
             }
@@ -274,8 +278,10 @@ void IOCPClient::WorkerThread() {
             int recvResult = WSARecv(socket_, &nextCtx->wsaBuf, 1, NULL, &flags, &nextCtx->overlapped, NULL);
             if (recvResult == SOCKET_ERROR && WSAGetLastError() != WSA_IO_PENDING) {
                 std::cerr << "WSARecv failed in loop: " << WSAGetLastError() << std::endl;
+                // Ensure proper disconnect handling
                 delete nextCtx;
                 delete context;
+                Disconnect();
                 break;
             }
             

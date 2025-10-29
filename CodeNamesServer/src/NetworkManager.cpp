@@ -8,7 +8,7 @@
 #include <thread>
 #include <stdexcept>
 
-NetworkManager::NetworkManager(int port, IOCPServer* server)
+NetworkManager::NetworkManager(int port, IMediator* server)
     : iocpHandle_(nullptr), listenSocket_(INVALID_SOCKET),
         isRunning_(false), workerThreadCount_(4),
         server_(server) {
@@ -81,13 +81,13 @@ bool NetworkManager::Initialize() {
     CreateWorkerThreads(workerThreadCount_);
 
     // Accept 시작
-    if (!StartAccept()) {
-        std::cerr << "Failed to start accept" << std::endl;
-        return false;
-    }
+    // if (!StartAccept()) {
+    //     std::cerr << "Failed to start accept" << std::endl;
+    //     return false;
+    // }
 
-    // 서버 가동상태 변경
-    isRunning_ = true;
+    // // 서버 가동상태 변경
+    // isRunning_ = true;
     
     std::cout << "NetworkManager initialized successfully" << std::endl;
     return true;

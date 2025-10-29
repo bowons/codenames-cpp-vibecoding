@@ -1,12 +1,14 @@
 #pragma once
 #define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <Windows.h>
 #include <vector>
 #include <thread>
 #include <atomic>
 #include <memory>
+
+#include "IMediator.h"
 
 class Session; // Session.h를 include하지 않고 포인터만 사용
 class IOCPServer;
@@ -14,11 +16,11 @@ class SessionManager;
 
 class NetworkManager {
     public:
-        NetworkManager(int port, IOCPServer* server);
+        NetworkManager(int port, IMediator* server);
         ~NetworkManager();
 
-        void SetServer(IOCPServer* server) { server_ = server; }
-        IOCPServer* GetServer() const { return server_; }
+        void SetServer(IMediator* server) { server_ = server; }
+        IMediator* GetServer() const { return server_; }
 
         bool Initialize();
         void Shutdown();
@@ -30,7 +32,7 @@ class NetworkManager {
         bool StartAccept();
 
     private:
-        IOCPServer* server_;  // IOCPServer 참조
+        IMediator* server_;  // IMediator 참조
 
         HANDLE iocpHandle_;
         SOCKET listenSocket_;

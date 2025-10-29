@@ -1,3 +1,4 @@
+#include "../../include/core/PacketProtocol.h"
 #include "../../include/gui/GameScreen.h"
 #include "../../include/gui/ConsoleUtils.h"
 #include <iostream>
@@ -14,7 +15,6 @@ GameScreen::GameScreen(std::shared_ptr<GameState> gameState, std::shared_ptr<IOC
       lastKnownRedScore_(-1),
       lastKnownBlueScore_(-1),
       lastMessageCount_(0) {
-    gameState_->AddObserver(shared_from_this());
 }
 
 void GameScreen::Show() {
@@ -184,18 +184,18 @@ void GameScreen::HandleGameInput(int key) {
 void GameScreen::SelectCard(int cardIndex) {
     if (cardIndex < gameState_->cards.size()) {
         const std::string& word = gameState_->cards[cardIndex].word;
-        std::string cmd = "ANSWER|" + word;
+        std::string cmd = std::string(PKT_ANSWER) + "|" + word;
         client_->SendData(cmd);
     }
 }
 
 void GameScreen::ProvideHint(const std::string& word, int count) {
-    std::string cmd = "HINT|" + word + "|" + std::to_string(count);
+    std::string cmd = std::string(PKT_HINT_MSG) + "|" + word + "|" + std::to_string(count);
     client_->SendData(cmd);
 }
 
 void GameScreen::SendMessage(const std::string& message) {
-    std::string cmd = "CHAT|" + message;
+    std::string cmd = std::string(PKT_CHAT_MSG) + "|" + message;
     client_->SendData(cmd);
 }
 

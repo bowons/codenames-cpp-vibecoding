@@ -23,7 +23,7 @@ enum class SceneState {
 
 class GUIManager {
 public:
-    GUIManager();
+    GUIManager(std::shared_ptr<GameState> gameState);
     ~GUIManager();
     
     // GUI 시스템 초기화
@@ -33,9 +33,7 @@ public:
     void Run();
     
     // IOCPClient 연결
-    void SetNetworkClient(std::shared_ptr<IOCPClient> client) {
-        client_ = client;
-    }
+    void SetNetworkClient(std::shared_ptr<IOCPClient> client);
     
 private:
     std::shared_ptr<GameState> gameState_;

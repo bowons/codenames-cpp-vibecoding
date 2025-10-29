@@ -1,8 +1,8 @@
 #include <iostream>
 #define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <Windows.h>
 #include "IOCPServer.h"
 
 // 전역 서버 포인터와 종료 이벤트

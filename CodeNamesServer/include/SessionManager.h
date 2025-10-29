@@ -1,6 +1,8 @@
 #pragma once
 
+#define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #include <unordered_map>
 #include <queue>
 #include <memory>
@@ -10,12 +12,14 @@
 #include <thread>
 #include <unordered_map>
 
+#include "IMediator.h"
+
 class Session;
 class IOCPServer;
 
 class SessionManager { // 기존 프로젝트의 RoomManager 대체
 private:
-    IOCPServer* server_; 
+    IMediator* server_; 
     
     std::unordered_map<SOCKET, std::shared_ptr<Session>> sessions_;
     std::unordered_map<std::string, SOCKET> tokenToSocket_; // 토큰 + 소켓 매핑
@@ -24,7 +28,7 @@ private:
     std::atomic<size_t> sessionCount_;
 
 public:
-    SessionManager(IOCPServer* server);
+    SessionManager(IMediator* server);
     ~SessionManager();
 
     // 세션 관리

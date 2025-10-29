@@ -89,29 +89,34 @@ void IOCPServer::CreateGameRoom(const std::vector<std::shared_ptr<Session>>& pla
         return;
     }
 
+    std::string roomId = "room_" + std::to_string(std::time(nullptr));
+    auto gameManager = std::make_unique<GameManager>(roomId);
+
     try {
         std::cout << "게임 룸 생성 시작" << std::endl;
-        
-        std::string roomId = "room_" + std::to_string(std::time(nullptr));
-        auto gameManager = std::make_unique<GameManager>(roomId);
-        
+
+        {
+            std::lock_guard<std::mutex> lock(gamesMutex_);
+            activeGames_[roomId] = std::move(gameManager);
+        }
+
+        GameManager* gmPtr = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(gamesMutex_);
+            auto it = activeGames_.find(roomId);
+            if (it == activeGames_.end()) throw std::runtime_error("Insert failed");
+            gmPtr = it->second.get();
+        }
+
         for (auto& session : players) {
             if (session && !session->IsClosed()) {
-                gameManager->AddPlayer(session.get(), session->GetUserName(), session->GetToken());
-                session->SetGameManager(gameManager.get());
+                gmPtr->AddPlayer(session.get(), session->GetUserName(), session->GetToken());
+                session->SetGameManager(gmPtr);
                 session->SetState(SessionState::IN_GAME);
-                
-                // 매칭 큐에서 제거
                 session->SetInMatchingQueue(false);
                 
                 std::cout << "플레이어 게임 추가: " << session->GetUserName() << std::endl;
             }
-        }
-
-        // activeGames_에 추가 후 게임 시작
-        {
-            std::lock_guard<std::mutex> lock(gamesMutex_);
-            activeGames_[roomId] = std::move(gameManager);
         }
         
         // 게임 시작
@@ -127,6 +132,15 @@ void IOCPServer::CreateGameRoom(const std::vector<std::shared_ptr<Session>>& pla
     } catch (const std::exception& e) {
         std::cerr << "게임 룸 생성 오류: " << e.what() << std::endl;
         
+        // 롤백: activeGames_에 추가된 항목이 있다면 제거
+        {
+            std::lock_guard<std::mutex> lock(gamesMutex_);
+            auto it = activeGames_.find(roomId);
+            if (it != activeGames_.end()) {
+                activeGames_.erase(it);
+            }
+        }
+
         // 오류 발생 시 플레이어들을 로비로 되돌림
         for (auto& session : players) {
             if (session && !session->IsClosed()) {

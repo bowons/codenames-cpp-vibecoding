@@ -38,7 +38,7 @@ struct GameCard {
 struct GameMessage {
     std::string nickname;
     std::string message;
-    int team;  // 0: RED, 1: BLUE, 999: SYSTEM
+    int team;  // 0: RED, 1: BLUE, 2: SYSTEM
 };
 
 // ==================== 옵저버 인터페이스 ====================
@@ -76,7 +76,7 @@ public:
     std::vector<GameCard> cards;
 
     int currentTurn;        // 0: red, 1: blue
-    int currentPhase_;      // 게임 페이즈 (0: 힌트, 1: 정답)
+    int inGameStep;         // 게임 내부 단계(예: 0=스파이마스터, 1=에이전트) - currentPhase와 구분
     int redScore;
     int blueScore;
     std::string hintWord;
@@ -112,7 +112,7 @@ private:
     void NotifyCardsUpdated();
     void NotifyScoreUpdated();
     void NotifyHintReceived();
-    void NotifyCardRevealed();
+    void NotifyCardRevealed(int cardIndex);
     void NotifyMessageReceived(const GameMessage& msg);
     void NotifyTurnChanged();
     void NotifyGameOver();
