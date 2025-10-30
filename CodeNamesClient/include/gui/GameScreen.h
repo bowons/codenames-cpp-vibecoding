@@ -6,6 +6,15 @@
 #include "../core/GameState.h"
 #include "../core/IOCPClient.h"
 
+// 입력 모드
+enum InputMode {
+    NONE,
+    INPUT_HINT_WORD,    // 힌트 단어 입력
+    INPUT_HINT_COUNT,   // 힌트 숫자 입력
+    INPUT_ANSWER,       // 답변 입력
+    INPUT_CHAT          // 채팅 입력
+};
+
 class GameScreen : public GameStateObserver, public std::enable_shared_from_this<GameScreen> {
 public:
     GameScreen(std::shared_ptr<GameState> gameState, std::shared_ptr<IOCPClient> client);
@@ -24,9 +33,6 @@ public:
     void OnTurnChanged(int team) override;
     void OnGameOver() override;
 
-    // 네트워크 클라이언트 설정(런타임에 변경 가능)
-    void SetClient(std::shared_ptr<IOCPClient> client) { client_ = client; }
-
 private:
     std::shared_ptr<GameState> gameState_;
     std::shared_ptr<IOCPClient> client_;
@@ -38,6 +44,11 @@ private:
     int lastKnownRedScore_;      // 이전 점수 추적
     int lastKnownBlueScore_;
     int lastMessageCount_;       // 이전 메시지 개수 추적
+    
+    // 입력 모드 관련
+    InputMode inputMode_;        // 현재 입력 모드
+    std::string hintWord_;       // 힌트 단어 임시 저장
+    bool inInputMode_;           // 입력 모드 플래그
     
     // 게임 화면 그리기
     void DrawGameBoard();
