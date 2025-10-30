@@ -49,6 +49,8 @@ private:
 
     // 기타
     void HandleError(const std::string& data);
+    // 로그인 실패용 사용자 피드백 (계정 없음 / 비밀번호 틀림 등)
+    void HandleLoginFailure(const std::string& reason);
 
     // ==================== 유틸리티 함수 ====================
     // 패킷 데이터 파싱

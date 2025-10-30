@@ -59,6 +59,16 @@ public:
     // 특정 위치에 색상이 있는 텍스트 출력
     static void PrintColoredAt(int x, int y, const std::string& text, ConsoleColor color);
 
+    // 상태 표시(상단 테두리에 한 줄로 표시)
+    static void SetStatus(const std::string& status);
+
+    // Draw a simple input box/prompt at (x,y) with given width and prompt text.
+    // This does not read input; it only draws the prompt and reserves space.
+    static void DrawInputBox(int x, int y, int width, const std::string& prompt);
+
+    // Clear a portion of a line starting at (x,y) of given width (overwrite with spaces)
+    static void ClearLine(int x, int y, int width);
+
 private:
     static HANDLE consoleHandle_;
     static CONSOLE_SCREEN_BUFFER_INFO consoleInfo_;

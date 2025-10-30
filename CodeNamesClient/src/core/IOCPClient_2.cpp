@@ -232,13 +232,13 @@ void IOCPClient_2::WorkerThread() {
         );
 
         if (!result) {
-            DWORD err = GetLastError();
-            if (err == ERROR_OPERATION_ABORTED) {
-                // 소켓이 닫혔거나 취소됨 - 정상 종료
+                DWORD err = GetLastError();
+                if (err == ERROR_OPERATION_ABORTED) {
+                    // 소켓이 닫혔거나 취소됨 - 정상 종료
+                    break;
+                }
+        std::cerr << "GetQueuedCompletionStatus failed: " << err << std::endl;
                 break;
-            }
-            std::cerr << "GetQueuedCompletionStatus failed: " << err << std::endl;
-            break;
         }
 
         if (overlapped == nullptr) {
@@ -281,7 +281,7 @@ void IOCPClient_2::WorkerThread() {
         } else if (context->operation == 1) {  // SEND 완료
             // 전송 완료 처리
             std::cout << "Send completed: " << byteTransferred << " bytes" << std::endl;
-            
+
             // 전송 컨텍스트 정리
             delete context;
         }

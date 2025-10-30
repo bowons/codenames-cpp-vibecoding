@@ -86,8 +86,8 @@ bool NetworkManager::Initialize() {
     //     return false;
     // }
 
-    // // 서버 가동상태 변경
-    // isRunning_ = true;
+    // 서버 가동상태 변경
+    isRunning_ = true;
     
     std::cout << "NetworkManager initialized successfully" << std::endl;
     return true;
@@ -308,7 +308,8 @@ void NetworkManager::ProcessCompletionPacket(DWORD bytesTransferred, Session* se
     // I/O 작업 종류에 따른 처리
     switch (overlapped->operation) {
     case IOOperation::RECV:
-        session->ProcessRecv(bytesTransferred);
+        // Pass overlapped buffer to Session so it can read the received bytes
+        session->ProcessRecv(bytesTransferred, overlapped);
         break;
     
     case IOOperation::SEND:

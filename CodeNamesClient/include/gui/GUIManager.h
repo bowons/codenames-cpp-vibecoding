@@ -7,12 +7,14 @@
 #include "../core/IOCPClient.h"
 #include "ConsoleUtils.h"
 #include "LoginScreen.h"
+#include "SignupScreen.h"
 #include "MainScreen.h"
 #include "GameScreen.h"
 #include "ResultScreen.h"
 
 enum class SceneState {
     LOGIN,
+    SIGNUP,
     MAIN_MENU,
     MATCHING,
     GAME,
@@ -40,6 +42,7 @@ private:
     std::shared_ptr<IOCPClient> client_;
     
     std::shared_ptr<LoginScreen> loginScreen_;
+    std::shared_ptr<SignupScreen> signupScreen_;
     std::shared_ptr<MainScreen> mainScreen_;
     std::shared_ptr<GameScreen> gameScreen_;
     std::shared_ptr<ResultScreen> resultScreen_;
@@ -52,6 +55,7 @@ private:
     
     // 각 씬 루프
     void LoginSceneLoop();
+    void SignupSceneLoop();
     void MainMenuSceneLoop();
     void MatchingSceneLoop();
     void GameSceneLoop();

@@ -6,6 +6,7 @@
 #include <iostream>
 #include <vector>
 #include <thread>
+#include <chrono>
 #include <ctime>
 #include "IOCPServer.h"
 
@@ -304,7 +305,12 @@ void SessionManager::HandleAuthProtocol(Session* session, const std::string& dat
             std::string nick = data.substr(second_pipe + 1);
 
             if (auto dbManager = session->GetDatabaseManager()) {
+                // Measure Signup latency for diagnostics
+                auto t0 = std::chrono::steady_clock::now();
                 DatabaseResult result = dbManager->SignupUser(id, pw, nick);
+                auto t1 = std::chrono::steady_clock::now();
+                auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+                std::cout << "[Timing] SignupUser took " << ms << " ms for id=" << id << std::endl;
                 if (result == DatabaseResult::SUCCESS) {
                     std::string token = dbManager->GenerateToken();
                     session->SetToken(token);

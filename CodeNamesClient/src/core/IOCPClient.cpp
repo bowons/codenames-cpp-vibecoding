@@ -188,7 +188,13 @@ bool IOCPClient::InitializeIOCP() {
         CleanupIOCP();
         return false;
     }
-    
+    // Disable Nagle's algorithm to avoid small-packet delays (reduce latency)
+    INT optVal = 1;
+    if (setsockopt(socket_, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&optVal), sizeof(optVal)) == SOCKET_ERROR) {
+        std::cerr << "setsockopt(TCP_NODELAY) failed: " << WSAGetLastError() << std::endl;
+    } else {
+        std::cout << "TCP_NODELAY set (Nagle disabled)" << std::endl;
+    }
     HANDLE result = CreateIoCompletionPort(
         reinterpret_cast<HANDLE>(socket_),
         iocpHandle_,
@@ -241,7 +247,25 @@ void IOCPClient::WorkerThread() {
                 // 소켓이 닫혔거나 취소됨 - 정상 종료
                 break;
             }
-            std::cerr << "GetQueuedCompletionStatus failed: " << err << std::endl;
+            // Print human-readable error message for easier debugging
+            LPSTR msgBuf = nullptr;
+            FormatMessageA(
+                FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                NULL,
+                err,
+                MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                (LPSTR)&msgBuf,
+                0,
+                NULL);
+
+            std::cerr << "GetQueuedCompletionStatus failed: code=" << err;
+            if (msgBuf) {
+                std::cerr << " (" << msgBuf << ")";
+            }
+            std::cerr << " iocpHandle=" << iocpHandle_ << " socket=" << socket_ << std::endl;
+
+            if (msgBuf) LocalFree(msgBuf);
+
             // Ensure proper disconnect handling
             Disconnect();
             break;
@@ -254,7 +278,7 @@ void IOCPClient::WorkerThread() {
 
         IOContext* context = reinterpret_cast<IOContext*>(overlapped);
         
-        if (context->operation == 0) {  // RECV 완료
+            if (context->operation == 0) {  // RECV 완료
             if (byteTransferred == 0) {
                 // 원격이 연결 종료
                 std::cout << "Remote closed connection" << std::endl;
@@ -291,7 +315,7 @@ void IOCPClient::WorkerThread() {
         } else if (context->operation == 1) {  // SEND 완료
             // 전송 완료 처리
             std::cout << "Send completed: " << byteTransferred << " bytes" << std::endl;
-            
+
             // 전송 컨텍스트 정리
             delete context;
         }

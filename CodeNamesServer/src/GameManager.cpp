@@ -6,6 +6,7 @@
 #include "GameManager.h"
 #include "Session.h"
 #include "PacketProtocol.h"
+#include <ctime>
 
 GameManager::GameManager(const std::string &roomId)
     : roomId_(roomId), currentTurn_(Team::RED), currentPhase_(GamePhase::HINT_PHASE),
@@ -59,7 +60,7 @@ GameManager::~GameManager() {
 }
 
 bool GameManager::AddPlayer(Session* session, const std::string& nickname, const std::string& token) {
-    std::lock_guard<std::mutex> lock(gameMutex_);
+    std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     if (!session) {
         std::cerr << "AddPlayer: session이 nullptr입니다." << std::endl;
@@ -86,7 +87,7 @@ bool GameManager::AddPlayer(Session* session, const std::string& nickname, const
 }
 
 void GameManager::RemovePlayer(const std::string& nickname) {
-    std::lock_guard<std::mutex> lock(gameMutex_);
+    std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     for (int i = 0; i < MAX_PLAYERS; ++i) {
         if (players_[i].session && players_[i].session->GetUserName() == nickname) {
@@ -140,23 +141,32 @@ int GameManager::FindPlayerIndex(const std::string& nickname) {
 }
 
 bool GameManager::StartGame() {
-    std::lock_guard<std::mutex> lock(gameMutex_);
+    std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     if (GetPlayerCount() != MAX_PLAYERS) {
         std::cerr << "StartGame: 플레이어가 부족합니다. 현재: " << GetPlayerCount() << "/6" << std::endl;
         return false;
     }
 
-    InitializeGame();
-    
-    SendGameInit();  
-    BroadcastGameSystemMessage("게임 시작!");
-    SendAllCardsToAll();
-    SendGameState(); 
+    try {
+        InitializeGame();
 
-    std::cout << "게임 시작: " << roomId_ << std::endl;
+        // Notify clients that the game is starting. Send a numeric session id (timestamp)
+        // so clients waiting on GAME_START will transition to PLAYING.
+        std::time_t startTs = std::time(nullptr);
+        BroadcastToAll(std::string(PKT_GAME_START) + "|" + std::to_string((long long)startTs));
 
-    return true;
+        SendGameInit();
+        BroadcastGameSystemMessage("게임 시작!");
+        SendAllCardsToAll();
+        SendGameState();
+
+        std::cout << "게임 시작: " << roomId_ << std::endl;
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "[GameManager] StartGame threw exception: " << e.what() << std::endl;
+        throw;
+    }
 }
 
 void GameManager::InitializeGame() {
@@ -253,7 +263,7 @@ void GameManager::AssignCards() {
 }
 
 void GameManager::SendAllCards(Session* session) {
-    std::lock_guard<std::mutex> lock(gameMutex_);
+    std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     std::string cardsMsg = std::string(PKT_ALL_CARDS);
     for (int i = 0; i < MAX_CARDS; ++i) {
@@ -265,7 +275,9 @@ void GameManager::SendAllCards(Session* session) {
 
     if (session && !session->IsClosed()) {
         session->PostSend(cardsMsg);
-        std::cout << "[" << roomId_ << "] 모든 카드 정보 전송 to " << session->GetUserName() << std::endl;
+        std::cout << "[" << roomId_ << "] 모든 카드 정보 전송 to " << session->GetUserName() << "[" << cardsMsg << "]" << std::endl;
+    } else {
+        std::cout << "[" << roomId_ << "] ALL_CARDS skipped for closed/null session" << std::endl;
     }
 }
 
@@ -280,7 +292,7 @@ void GameManager::SendAllCardsToAll() {
 void GameManager::SendCardUpdate(int cardIndex) {
     if (cardIndex < 0 || cardIndex >= MAX_CARDS) return;
 
-    std::lock_guard<std::mutex> lock(gameMutex_);
+    std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     std::string updateMsg = std::string(PKT_CARD_UPDATE) + "|" + std::to_string(cardIndex) +
                             "|" + std::to_string(cards_[cardIndex].isUsed ? 1 : 0);
@@ -293,7 +305,7 @@ void GameManager::SendCardUpdate(int cardIndex) {
 void GameManager::BroadcastToAll(const std::string& message) {
     if (message.empty()) return;
 
-    std::lock_guard<std::mutex> lock(gameMutex_);
+    std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     for (int i = 0; i < MAX_PLAYERS; ++i) {
         if (players_[i].session && !players_[i].session->IsClosed()) {
@@ -317,7 +329,7 @@ void GameManager::SendGameInit() {
 }
 
 void GameManager::SendGameState() {
-    std::lock_guard<std::mutex> lock(gameMutex_);
+    std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     std::string stateMsg = std::string(PKT_TURN_UPDATE) + "|" + 
                           std::to_string((int)currentTurn_) + "|" +
@@ -356,7 +368,7 @@ std::string GameManager::CreateGameInitMessage() {
 void GameManager::BroadcastToTeam(Team team, const std::string& message) {
     if (message.empty()) return;
 
-    std::lock_guard<std::mutex> lock(gameMutex_);
+    std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     for (int i = 0; i < MAX_PLAYERS; ++i) {
         if (players_[i].session && !players_[i].session->IsClosed() && players_[i].team == team) {
@@ -368,7 +380,7 @@ void GameManager::BroadcastToTeam(Team team, const std::string& message) {
 }
 
 void GameManager::SwitchTurn() {
-    std::lock_guard<std::mutex> lock(gameMutex_);
+    std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     currentTurn_ = (currentTurn_ == Team::RED) ? Team::BLUE : Team::RED;
     currentPhase_ = GamePhase::HINT_PHASE;
@@ -390,7 +402,7 @@ void GameManager::SwitchTurn() {
 }
 
 void GameManager::SwitchPhase() {
-    std::lock_guard<std::mutex> lock(gameMutex_);
+    std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     if (currentPhase_ == GamePhase::HINT_PHASE) {
         currentPhase_ = GamePhase::GUESS_PHASE;
@@ -410,7 +422,7 @@ void GameManager::SwitchPhase() {
 }
 
 bool GameManager::ProcessHint(int playerIndex, const std::string& word, int number) {
-    std::lock_guard<std::mutex> lock(gameMutex_);
+    std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     // 유효성 검사, 부적합시 실행 x
     if (!IsValidPlayerForHint(playerIndex)) return false;
@@ -427,7 +439,7 @@ bool GameManager::ProcessHint(int playerIndex, const std::string& word, int numb
 }
 
 bool GameManager::ProcessAnswer(int playerIndex, const std::string& word) {
-    std::lock_guard<std::mutex> lock(gameMutex_);
+    std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     // 유효성 검사
     if (!IsValidPlayerForAnswer(playerIndex)) return false;
@@ -504,7 +516,7 @@ bool GameManager::ProcessAnswer(int playerIndex, const std::string& word) {
 
 bool GameManager::ProcessChat(int playerIndex, const std::string &message)
 {
-    std::lock_guard<std::mutex> lock(gameMutex_);
+    std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     if (gameOver_) return false;
     if (playerIndex < 0 || playerIndex >= MAX_PLAYERS) return false;
@@ -528,7 +540,7 @@ bool GameManager::ProcessChat(int playerIndex, const std::string &message)
 }
 
 Team GameManager::CheckWinner() {
-    std::lock_guard<std::mutex> lock(gameMutex_);
+    std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     if (redScore_ >= RED_CARDS) {
         std::cout << "[" << roomId_ << "] RED팀 승리! (점수: " << redScore_ << "/" << RED_CARDS << ")" << std::endl;
@@ -544,7 +556,7 @@ Team GameManager::CheckWinner() {
 
 void GameManager::EndGame(Team winner)
 {
-    std::lock_guard<std::mutex> lock(gameMutex_);
+    std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     gameOver_ = true;
     std::string winnerName = (winner == Team::RED) ? "RED" : 

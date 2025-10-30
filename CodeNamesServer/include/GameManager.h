@@ -91,7 +91,7 @@ private:
     int hintCount_;
     bool gameOver_;
 
-    std::mutex gameMutex_;
+    std::recursive_mutex gameMutex_;
 
 public:
     GameManager(const std::string& roomId);

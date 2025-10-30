@@ -9,21 +9,27 @@
 #include "../include/core/IOCPClient.h"
 #include "../include/core/PacketHandler.h"
 #include "../include/core/GameState.h"
+#include "../include/gui/ConsoleUtils.h"
+#include "../include/core/Logger.h"
 
 // 전역 변수
+// Globals
 std::shared_ptr<GUIManager> g_guiManager = nullptr;
 std::shared_ptr<PacketHandler> g_packetHandler = nullptr;
 std::shared_ptr<GameState> g_gameState = nullptr;
 
 // Thread-safe packet queue: network thread pushes, GUI/main thread consumes
+// 스레드-안전 패킷 큐: 네트워크 스레드가 푸시하고 GUI(메인) 스레드가 소비합니다.
 std::mutex g_packetQueueMutex;
 std::deque<std::string> g_packetQueue;
 
 // Main-thread task queue for marshalling network callbacks to GUI thread
+// 메인 스레드용 작업 큐: 네트워크 콜백을 GUI(메인) 스레드에서 안전하게 실행하도록 전달합니다.
 std::mutex g_mainTasksMutex;
 std::deque<std::function<void()>> g_mainTasks;
 
 // 네트워크 데이터 수신 콜백
+// 네트워크 스레드에서 수신된 패킷을 메인 스레드 큐로 옮겨 GUI 스레드가 처리하게 합니다.
 void OnNetworkDataReceived(const std::string& packetData) {
     // Enqueue packet for processing on the main (GUI) thread to avoid
     // race conditions between network thread and UI thread.
@@ -34,6 +40,7 @@ void OnNetworkDataReceived(const std::string& packetData) {
 }
 
 // 네트워크 연결 상태 콜백
+// 서버와의 연결이 성공했을 때 메인 스레드에서 GameState를 변경하도록 작업을 큐에 넣습니다.
 void OnNetworkConnected() {
     std::cout << "[Network] Connected to server!" << std::endl;
     // Enqueue a main-thread task so GameState is modified on GUI thread
@@ -48,15 +55,23 @@ void OnNetworkConnected() {
 }
 
 // 네트워크 연결 해제 콜백
+// 서버와의 연결이 끊겼을 때 호출됩니다. 즉시 장면을 바꾸지 않고
+// 메인 스레드에서 상태 표시만 업데이트하도록 작업을 큐에 넣습니다.
 void OnNetworkDisconnected() {
     std::cout << "[Network] Disconnected from server!" << std::endl;
-    // Enqueue a main-thread task to update GameState safely
+
+    // NOTE: avoid acquiring the log mutex in the network thread while also
+    // trying to acquire g_mainTasksMutex — that ordering can deadlock if the
+    // main thread holds g_mainTasksMutex and then logs (locks the log mutex).
+    // To prevent this, perform logging on the main thread inside the enqueued
+    // task instead of logging here.
     {
         std::lock_guard<std::mutex> lock(g_mainTasksMutex);
         g_mainTasks.push_back([]() {
-            if (g_gameState) {
-                g_gameState->SetPhase(GamePhase::ERROR_PHASE);
-            }
+            // Execute logging and status update on the GUI/main thread to
+            // avoid lock-order inversion between logMutex and g_mainTasksMutex.
+            Logger::Warn("[Network] Disconnected from server!");
+            ConsoleUtils::SetStatus(std::string("Network: Disconnected from server!"));
         });
     }
 }

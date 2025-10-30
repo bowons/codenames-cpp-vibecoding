@@ -12,7 +12,9 @@ LoginScreen::LoginScreen(std::shared_ptr<GameState> gameState)
 LoginResult LoginScreen::Show() {
     ConsoleUtils::Initialize();
     ConsoleUtils::Clear();
-    
+    // Reset transient result so repeated calls to Show() require user action again
+    loginResult_ = LoginResult::NONE;
+
     while (loginResult_ == LoginResult::NONE) {
         ConsoleUtils::Clear();
         Draw();
@@ -76,6 +78,44 @@ void LoginScreen::Draw() {
 }
 
 void LoginScreen::HandleInput(int key) {
+    if (key == 224 || key == 0) {  // 화살표 키의 첫 번째 바이트
+        key = _getch();  // 두 번째 바이트 읽기
+        switch (key) {
+            case 72:  // 위 화살표
+            case 75:  // 왼쪽 화살표
+                switch (currentState_) {
+                    case LoginState::PASSWORD_INPUT:
+                        currentState_ = LoginState::ID_INPUT;
+                        break;
+                    case LoginState::LOGIN_BUTTON:
+                        currentState_ = LoginState::PASSWORD_INPUT;
+                        break;
+                    case LoginState::SIGNUP_BUTTON:
+                        currentState_ = LoginState::LOGIN_BUTTON;
+                        break;
+                    default:
+                        break;
+                }
+                return;
+            case 80:  // 아래 화살표
+            case 77:  // 오른쪽 화살표
+                switch (currentState_) {
+                    case LoginState::ID_INPUT:
+                        currentState_ = LoginState::PASSWORD_INPUT;
+                        break;
+                    case LoginState::PASSWORD_INPUT:
+                        currentState_ = LoginState::LOGIN_BUTTON;
+                        break;
+                    case LoginState::LOGIN_BUTTON:
+                        currentState_ = LoginState::SIGNUP_BUTTON;
+                        break;
+                    default:
+                        break;
+                }
+                return;
+        }
+    }
+
     switch (key) {
         case 9:  // TAB - 상태 전환
             switch (currentState_) {
@@ -102,8 +142,8 @@ void LoginScreen::HandleInput(int key) {
                     loginResult_ = LoginResult::SUCCESS;
                 }
             } else if (currentState_ == LoginState::SIGNUP_BUTTON) {
-                // 회원가입 화면으로 전환 (추후 구현)
-                loginResult_ = LoginResult::SUCCESS;
+                // 회원가입 화면으로 전환
+                loginResult_ = LoginResult::SIGNUP;
             }
             break;
             

@@ -12,7 +12,7 @@
 
 class IOCPClient {
 public:
-    static constexpr int BUFFER_SIZE = 256;
+    static constexpr int BUFFER_SIZE = 2048;
     static constexpr int SERVER_PORT = 55014;
 
     IOCPClient();

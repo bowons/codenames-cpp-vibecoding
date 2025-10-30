@@ -20,9 +20,8 @@ MainMenuOption MainScreen::Show() {
         Draw();
         
         int key = _getch();
-        HandleInput(key);
-        
-        if (selectedOption_ != MainMenuOption::QUIT) {
+        bool confirmed = HandleInput(key);
+        if (confirmed) {
             return selectedOption_;
         }
     }
@@ -51,85 +50,53 @@ void MainScreen::Draw() {
     y += 4;
     
     // START GAME
-    ConsoleUtils::PrintAt(x, y, "[");
+    // START GAME
     if (currentSelection_ == 0) {
-        ConsoleUtils::SetTextColor(ConsoleColor::BLACK, ConsoleColor::GREEN);
+        ConsoleUtils::PrintAt(x, y, ">  ");
+    } else {
+        ConsoleUtils::PrintAt(x, y, "   ");
     }
-    ConsoleUtils::PrintAt(x + 1, y, "1. Start Game");
-    ConsoleUtils::ResetTextColor();
-    ConsoleUtils::PrintAt(x + 14, y, "]");
-    
-    // PROFILE
-    ConsoleUtils::PrintAt(x, y + 2, "[");
-    if (currentSelection_ == 1) {
-        ConsoleUtils::SetTextColor(ConsoleColor::BLACK, ConsoleColor::GREEN);
-    }
-    ConsoleUtils::PrintAt(x + 1, y + 2, "2. Profile");
-    ConsoleUtils::ResetTextColor();
-    ConsoleUtils::PrintAt(x + 11, y + 2, "]");
+    ConsoleUtils::PrintAt(x + 3, y, "1. Start Game");
     
     // QUIT
-    ConsoleUtils::PrintAt(x, y + 4, "[");
-    if (currentSelection_ == 2) {
-        ConsoleUtils::SetTextColor(ConsoleColor::BLACK, ConsoleColor::RED);
+    if (currentSelection_ == 1) {
+        ConsoleUtils::PrintAt(x, y + 2, ">  ");
+    } else {
+        ConsoleUtils::PrintAt(x, y + 2, "   ");
     }
-    ConsoleUtils::PrintAt(x + 1, y + 4, "3. Quit");
-    ConsoleUtils::ResetTextColor();
-    ConsoleUtils::PrintAt(x + 8, y + 4, "]");
+    ConsoleUtils::PrintAt(x + 3, y + 2, "2. Quit");
     
     // 도움말
-    ConsoleUtils::PrintCentered(height - 2, "Use Arrow Keys or 1/2/3 to select, Press Enter", ConsoleColor::CYAN);
+    ConsoleUtils::PrintCentered(height - 2, "Use Arrow Keys or 1/2 to select, Press Enter", ConsoleColor::CYAN);
 }
 
-void MainScreen::HandleInput(int key) {
+bool MainScreen::HandleInput(int key) {
     if (key == '1' || key == 49) {
         selectedOption_ = MainMenuOption::START_GAME;
+        return true;
     } else if (key == '2' || key == 50) {
-        DisplayProfile();
-        selectedOption_ = MainMenuOption::PROFILE;
-    } else if (key == '3' || key == 51) {
         selectedOption_ = MainMenuOption::QUIT;
+        return true;
     } else if (key == 224) {  // 특수 키
         int nextKey = _getch();
         if (nextKey == 72) {  // UP
-            currentSelection_ = (currentSelection_ - 1 + 3) % 3;
+            currentSelection_ = (currentSelection_ - 1 + 2) % 2;
         } else if (nextKey == 80) {  // DOWN
-            currentSelection_ = (currentSelection_ + 1) % 3;
+            currentSelection_ = (currentSelection_ + 1) % 2;
         }
+        return false;
     } else if (key == '\r' || key == '\n') {
         switch (currentSelection_) {
             case 0:
                 selectedOption_ = MainMenuOption::START_GAME;
-                break;
+                return true;
             case 1:
-                DisplayProfile();
-                selectedOption_ = MainMenuOption::PROFILE;
-                break;
-            case 2:
                 selectedOption_ = MainMenuOption::QUIT;
-                break;
+                return true;
         }
     }
+
+    return false;
 }
 
-void MainScreen::DisplayProfile() {
-    ConsoleUtils::Clear();
-    
-    int width, height;
-    ConsoleUtils::GetConsoleSize(width, height);
-    
-    ConsoleUtils::DrawBorder();
-    
-    ConsoleUtils::PrintCentered(2, "=== Profile ===", ConsoleColor::YELLOW);
-    
-    int y = height / 3;
-    int x = (width - 40) / 2;
-    
-    ConsoleUtils::PrintAt(x, y, "Nickname: " + gameState_->username);
-    ConsoleUtils::PrintAt(x, y + 2, "Wins: 0");
-    ConsoleUtils::PrintAt(x, y + 3, "Losses: 0");
-    ConsoleUtils::PrintAt(x, y + 4, "Win Rate: 0.0%");
-    
-    ConsoleUtils::PrintCentered(height - 2, "Press any key to return...", ConsoleColor::CYAN);
-    _getch();
-}
+// Profile display removed (not implemented)

@@ -76,11 +76,14 @@ public:
     std::vector<GameCard> cards;
 
     int currentTurn;        // 0: red, 1: blue
-    int inGameStep;         // 게임 내부 단계(예: 0=스파이마스터, 1=에이전트) - currentPhase와 구분
+    int inGameStep;         // 게임 내부 단계(0 : 힌트, 1 : 정답) - currentPhase와 구분
     int redScore;
     int blueScore;
     std::string hintWord;
     int hintNumber;
+    // 매칭 큐 관련 (서버에서 WAIT_REPLY로 전달되는 대기 인원 정보)
+    int matchingCount;
+    int matchingMax; // 서버가 알려주는 매칭에 필요한 최대 플레이어 수
     
     std::vector<GameMessage> messages;  // 채팅 메시지 히스토리
 

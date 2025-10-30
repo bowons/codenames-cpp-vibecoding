@@ -13,6 +13,7 @@ GameState::GameState()
       redScore(0),
       blueScore(0),
       hintNumber(0) {
+        matchingCount = 0;
 }
 
 // ==================== 옵저버 관리 ====================
@@ -162,6 +163,7 @@ void GameState::Reset() {
     hintWord.clear();
     hintNumber = 0;
     messages.clear();
+    matchingCount = 0;
 }
 
 bool GameState::IsMyTurn() const {

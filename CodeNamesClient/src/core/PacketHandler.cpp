@@ -1,6 +1,8 @@
 #include "../../include/core/PacketHandler.h"
 #include "../../include/core/PacketProtocol.h"
 #include "../../include/core/GameState.h"
+#include "../../include/gui/ConsoleUtils.h"
+#include "../../include/core/Logger.h"
 #include <iostream>
 #include <sstream>
 #include <algorithm>
@@ -20,10 +22,10 @@ void PacketHandler::RegisterDefaultHandlers() {
     RegisterHandler(PKT_SIGNUP_OK, [this](const std::string& data) { HandleSignupOk(data); });
     RegisterHandler(PKT_SIGNUP_ERROR, [this](const std::string& data) { HandleError(data); });
     RegisterHandler(PKT_LOGIN_OK, [this](const std::string& data) { HandleLoginOk(data); });
-    RegisterHandler(PKT_LOGIN_NO_ACCOUNT, [this](const std::string& data) { HandleError(data); });
-    RegisterHandler(PKT_LOGIN_WRONG_PW, [this](const std::string& data) { HandleError(data); });
-    RegisterHandler(PKT_LOGIN_SUSPENDED, [this](const std::string& data) { HandleError(data); });
-    RegisterHandler(PKT_LOGIN_ERROR, [this](const std::string& data) { HandleError(data); });
+    RegisterHandler(PKT_LOGIN_NO_ACCOUNT, [this](const std::string& data) { HandleLoginFailure("Account not found"); });
+    RegisterHandler(PKT_LOGIN_WRONG_PW, [this](const std::string& data) { HandleLoginFailure("Wrong password"); });
+    RegisterHandler(PKT_LOGIN_SUSPENDED, [this](const std::string& data) { HandleLoginFailure("Account suspended"); });
+    RegisterHandler(PKT_LOGIN_ERROR, [this](const std::string& data) { HandleLoginFailure("Login error"); });
     RegisterHandler(PKT_NICKNAME_EDIT_OK, [this](const std::string& data) { HandleError(data); });
     RegisterHandler(PKT_SIGNUP_DUPLICATE, [this](const std::string& data) { HandleError(data); });
     RegisterHandler(PKT_NICKNAME_EDIT_ERROR, [this](const std::string& data) { HandleError(data); });
@@ -34,6 +36,8 @@ void PacketHandler::RegisterDefaultHandlers() {
     // server sends TOKEN_VALID|nickname for validated tokens / profile info
     RegisterHandler(PKT_TOKEN_VALID, [this](const std::string& data) { HandleUserProfile(data); });
     RegisterHandler(PKT_INVALID_TOKEN, [this](const std::string& data) { HandleInvalidToken(data); });
+    // Authentication errors (server may send AUTH_ERROR|reason)
+    RegisterHandler(PKT_AUTH_ERROR, [this](const std::string& data) { HandleError(data); });
     RegisterHandler(PKT_SIGNUP_DUPLICATE, [this](const std::string& data) { HandleError(data); });
     RegisterHandler(PKT_NICKNAME_EDIT_OK, [this](const std::string& data) { HandleError(data); });
 
@@ -122,7 +126,7 @@ void PacketHandler::HandleSignupOk(const std::string& data) {
     if (!token.empty()) {
         gameState_->token = token;
         gameState_->SetPhase(GamePhase::LOBBY);
-        std::cout << "Signup successful. Token: " << token << std::endl;
+        Logger::Info(std::string("Signup successful. Token: ") + token);
     }
 }
 
@@ -132,14 +136,14 @@ void PacketHandler::HandleLoginOk(const std::string& data) {
     if (!token.empty()) {
         gameState_->token = token;
         gameState_->SetPhase(GamePhase::LOBBY);
-        std::cout << "Login successful. Token: " << token << std::endl;
+        Logger::Info(std::string("Login successful. Token: ") + token);
     }
 }
 
 void PacketHandler::HandleInvalidToken(const std::string& data) {
     // INVALID_TOKEN
     gameState_->SetPhase(GamePhase::ERROR_PHASE);
-    std::cout << "Invalid token. Please login again." << std::endl;
+    Logger::Warn("Invalid token. Please login again.");
 }
 
 // ==================== 사용자 정보 패킷 핸들러 ====================
@@ -150,7 +154,7 @@ void PacketHandler::HandleUserProfile(const std::string& data) {
 
     if (!nickname.empty()) {
         gameState_->username = nickname;
-        std::cout << "User profile: " << nickname << std::endl;
+        Logger::Info(std::string("User profile: ") + nickname);
     }
 }
 
@@ -158,18 +162,26 @@ void PacketHandler::HandleUserProfile(const std::string& data) {
 
 void PacketHandler::HandleWaitReply(const std::string& data) {
     // WAIT_REPLY|playerCount
+    // spec: WAIT_REPLY|playerCount|maxPlayers
     std::string countStr = ParseField(data, 0, "|");
+    std::string maxStr = ParseField(data, 1, "|");
     if (!countStr.empty()) {
         int count = std::stoi(countStr);
+        gameState_->matchingCount = count;
+        if (!maxStr.empty()) {
+            gameState_->matchingMax = std::stoi(maxStr);
+        }
+        // 저장: GUI가 이를 읽어 진행 바를 그리도록 함
         gameState_->SetPhase(GamePhase::MATCHING);
-        std::cout << "Matching in progress: " << count << " players waiting" << std::endl;
+        Logger::Info(std::string("Matching in progress: ") + std::to_string(count) +
+                    (gameState_->matchingMax > 0 ? (std::string(" / ") + std::to_string(gameState_->matchingMax)) : std::string("")));
     }
 }
 
 void PacketHandler::HandleQueueFull(const std::string& data) {
     // QUEUE_FULL
     gameState_->SetPhase(GamePhase::MATCHING);
-    std::cout << "Queue full! Game starting..." << std::endl;
+    Logger::Info("Queue full! Game starting...");
 }
 
 void PacketHandler::HandleGameInit(const std::string& data) {
@@ -195,7 +207,7 @@ void PacketHandler::HandleGameInit(const std::string& data) {
     }
     
     gameState_->UpdatePlayers(players);
-    std::cout << "Game initialized with " << players.size() << " players" << std::endl;
+    Logger::Info(std::string("Game initialized with ") + std::to_string(players.size()) + " players");
 }
 
 void PacketHandler::HandleGameStart(const std::string& data) {
@@ -204,7 +216,7 @@ void PacketHandler::HandleGameStart(const std::string& data) {
     if (!sessionIdStr.empty()) {
         gameState_->sessionId = std::stoi(sessionIdStr);
         gameState_->SetPhase(GamePhase::PLAYING);
-        std::cout << "Game started! Session ID: " << gameState_->sessionId << std::endl;
+        Logger::Info(std::string("Game started. Session ID: ") + std::to_string(gameState_->sessionId));
     }
 }
 
@@ -226,9 +238,9 @@ void PacketHandler::HandleAllCards(const std::string& data) {
             cards.push_back(c);
         }
     }
-    
+
     gameState_->UpdateCards(cards);
-    std::cout << "Received " << cards.size() << " cards" << std::endl;
+    Logger::Info(std::string("Received ") + std::to_string(cards.size()) + " cards");
 }
 
 void PacketHandler::HandleRoleInfo(const std::string& data) {
@@ -239,7 +251,7 @@ void PacketHandler::HandleRoleInfo(const std::string& data) {
         gameState_->myRole = role;
         gameState_->isMyLeader = (role == 0 || role == 2);  // 0, 2는 리더
         gameState_->myTeam = (role < 2) ? 0 : 1;  // 0,1은 팀0, 2,3은 팀1
-        std::cout << "My role: " << role << std::endl;
+        Logger::Info(std::string("My role: ") + std::to_string(role));
     }
 }
 
@@ -265,7 +277,7 @@ void PacketHandler::HandleHintMsg(const std::string& data) {
     
     if (!word.empty() && !countStr.empty()) {
         gameState_->SetHint(word, std::stoi(countStr));
-        std::cout << "Hint received: " << word << " (" << countStr << ")" << std::endl;
+        Logger::Info(std::string("Hint received: ") + word + " (" + countStr + ")");
     }
 }
 
@@ -277,7 +289,7 @@ void PacketHandler::HandleCardUpdate(const std::string& data) {
     if (!indexStr.empty()) {
         int index = std::stoi(indexStr);
         gameState_->RevealCard(index);
-        std::cout << "Card revealed: " << index << std::endl;
+        Logger::Info(std::string("Card revealed: ") + std::to_string(index));
     }
 }
 
@@ -295,7 +307,7 @@ void PacketHandler::HandleChatMsg(const std::string& data) {
         msg.team = teamStr.empty() ? 999 : std::stoi(teamStr);
         
         gameState_->AddMessage(msg);
-        std::cout << "[" << nickname << "]: " << message << std::endl;
+        Logger::Info(std::string("[") + nickname + "]: " + message);
     }
 }
 
@@ -304,5 +316,14 @@ void PacketHandler::HandleChatMsg(const std::string& data) {
 void PacketHandler::HandleError(const std::string& data) {
     // ERROR
     gameState_->SetPhase(GamePhase::ERROR_PHASE);
-    std::cout << "Server error occurred" << std::endl;
+    Logger::Error("Server error occurred");
+    // Show generic error status on GUI border
+    ConsoleUtils::SetStatus("Server error");
+    // leave additional behavior to specific handlers
+}
+
+void PacketHandler::HandleLoginFailure(const std::string& reason) {
+    // Don't move to ERROR_PHASE for ordinary login failures; instead show a status
+    Logger::Warn(std::string("Login failed: ") + reason);
+    ConsoleUtils::SetStatus(std::string("Login failed: ") + reason);
 }

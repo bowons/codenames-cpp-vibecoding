@@ -17,7 +17,8 @@ enum class LoginResult {
     NO_ACCOUNT = 1,
     WRONG_PASSWORD = 2,
     SUSPENDED = 3,
-    ERROR_LOGIN = 4
+    ERROR_LOGIN = 4,
+    SIGNUP = 5
 };
 
 class LoginScreen {

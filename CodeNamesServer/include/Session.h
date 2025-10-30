@@ -86,7 +86,7 @@ public:
     // 네트워크 작업
     bool PostRecv();
     bool PostSend(const std::string& data);
-    void ProcessRecv(size_t bytesTransferred);
+    void ProcessRecv(size_t bytesTransferred, struct OverlappedEx* overlapped);
     void ProcessSend(size_t bytesTransferred);
 
     // 상태 접근자

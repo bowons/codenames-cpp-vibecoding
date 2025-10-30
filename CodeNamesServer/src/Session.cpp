@@ -130,8 +130,8 @@ bool Session::PostSend(const std::string& data) {
     if (result == SOCKET_ERROR) {
         int error = WSAGetLastError();
         if (error != WSA_IO_PENDING) {
-            // 실제 에러 발생
-            std::cerr << "WSASend failed: " << error << std::endl;
+            // 실제 에러 발생 - 에러 코드를 자세히 로깅
+            std::cerr << "WSASend failed: error=" << error << " (WSAGetLastError)" << std::endl;
             delete sendOverlapped;
             return false;
         }
@@ -142,7 +142,7 @@ bool Session::PostSend(const std::string& data) {
     return true;
 }
 
-void Session::ProcessRecv(size_t bytesTransferred) {
+void Session::ProcessRecv(size_t bytesTransferred, struct OverlappedEx* overlapped) {
     // 연결 종료 확인
     if (bytesTransferred == 0) {
         std::cout << "클라이언트가 연결을 종료했습니다 (소켓: " << socket_ << ")" << std::endl;
@@ -152,9 +152,14 @@ void Session::ProcessRecv(size_t bytesTransferred) {
 
     // 받은 데이터를 문자열로 변환
     std::string receivedData;
-    receivedData.resize(bytesTransferred);
-    // memcpy(receivedData.data(), overlapped->buffer, bytesTransferred); // 실제 구현 시
-    
+    if (overlapped && overlapped->wsaBuf.buf) {
+        // overlapped->buffer에 저장된 바이트를 string으로 복사
+        receivedData.assign(overlapped->buffer, overlapped->buffer + bytesTransferred);
+    } else {
+        // 안전하게 빈 문자열 처리
+        receivedData = std::string();
+    }
+
     std::cout << "수신 데이터 (" << bytesTransferred << " bytes): " << receivedData << std::endl;
     
     // 상태별 패킷 처리 분배

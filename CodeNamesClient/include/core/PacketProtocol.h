@@ -36,7 +36,7 @@
 #define PKT_NICKNAME_EDIT_OK       "NICKNAME_EDIT_OK"       // server -> client
 #define PKT_NICKNAME_EDIT_ERROR    "NICKNAME_EDIT_ERROR"    // server -> client
 
-#define PKT_AUTH_ERROR_UNKNOWN     "AUTH_ERROR|UNKNOWN_PACKET" // server -> client
+#define PKT_AUTH_ERROR             "AUTH_ERROR"              // server -> client: AUTH_ERROR|reason (reason is sent after '|')
 
 // --- Game (GameManager) ---
 #define PKT_GAME_INIT              "GAME_INIT"              // server -> client: GAME_INIT|nick1|role1|team1|leader1|...

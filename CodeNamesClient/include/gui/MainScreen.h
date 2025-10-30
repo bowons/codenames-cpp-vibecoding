@@ -7,7 +7,6 @@
 
 enum class MainMenuOption {
     START_GAME,
-    PROFILE,
     QUIT
 };
 
@@ -19,7 +18,7 @@ public:
     MainMenuOption Show();
     
     // 사용자 프로필 조회
-    void DisplayProfile();
+    // (profile display removed)
     
     // 네트워크 클라이언트 설정(런타임에 변경 가능)
     void SetClient(std::shared_ptr<IOCPClient> client) { client_ = client; }
@@ -34,8 +33,8 @@ private:
     void Draw();
     
     // 입력 처리
-    void HandleInput(int key);
+    // 반환값: 사용자가 항목을 확정(엔터 또는 숫자 입력)하면 true, 그렇지 않으면 false
+    bool HandleInput(int key);
     
-    // 프로필 정보 표시
-    void DrawProfile();
+    // (profile display removed)
 };

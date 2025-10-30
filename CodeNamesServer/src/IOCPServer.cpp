@@ -95,38 +95,59 @@ void IOCPServer::CreateGameRoom(const std::vector<std::shared_ptr<Session>>& pla
     try {
         std::cout << "게임 룸 생성 시작" << std::endl;
 
+        // Insert game manager into active map
         {
             std::lock_guard<std::mutex> lock(gamesMutex_);
             activeGames_[roomId] = std::move(gameManager);
+            std::cout << "[IOCPServer] activeGames_ inserted roomId=" << roomId << std::endl;
         }
 
         GameManager* gmPtr = nullptr;
-        {
-            std::lock_guard<std::mutex> lock(gamesMutex_);
-            auto it = activeGames_.find(roomId);
-            if (it == activeGames_.end()) throw std::runtime_error("Insert failed");
-            gmPtr = it->second.get();
-        }
-
-        for (auto& session : players) {
-            if (session && !session->IsClosed()) {
-                gmPtr->AddPlayer(session.get(), session->GetUserName(), session->GetToken());
-                session->SetGameManager(gmPtr);
-                session->SetState(SessionState::IN_GAME);
-                session->SetInMatchingQueue(false);
-                
-                std::cout << "플레이어 게임 추가: " << session->GetUserName() << std::endl;
+        try {
+            {
+                std::lock_guard<std::mutex> lock(gamesMutex_);
+                auto it = activeGames_.find(roomId);
+                if (it == activeGames_.end()) throw std::runtime_error("Insert failed");
+                gmPtr = it->second.get();
             }
-        }
-        
-        // 게임 시작
-        {
+
+            std::cout << "[IOCPServer] Adding players to GameManager: count=" << players.size() << std::endl;
+            for (auto& session : players) {
+                if (session && !session->IsClosed()) {
+                    gmPtr->AddPlayer(session.get(), session->GetUserName(), session->GetToken());
+                    session->SetGameManager(gmPtr);
+                    session->SetState(SessionState::IN_GAME);
+                    session->SetInMatchingQueue(false);
+
+                    std::cout << "플레이어 게임 추가: " << session->GetUserName() << std::endl;
+                }
+            }
+
+            // 게임 시작
+            std::cout << "[IOCPServer] Calling StartGame for room=" << roomId << std::endl;
+            bool started = false;
+            try {
+                started = gmPtr->StartGame();
+            } catch (const std::exception& e) {
+                std::cerr << "[IOCPServer] StartGame threw exception: " << e.what() << std::endl;
+                throw; // rethrow to outer catch
+            }
+
+            if (started) {
+                std::cout << "게임 시작 완료: " << roomId << std::endl;
+            } else {
+                std::cerr << "[IOCPServer] StartGame returned false for room=" << roomId << std::endl;
+                throw std::runtime_error("StartGame returned false");
+            }
+        } catch (...) {
+            // ensure we remove the partially-created game if any
             std::lock_guard<std::mutex> lock(gamesMutex_);
             auto it = activeGames_.find(roomId);
             if (it != activeGames_.end()) {
-                it->second->StartGame();
-                std::cout << "게임 시작 완료: " << roomId << std::endl;
+                activeGames_.erase(it);
+                std::cerr << "[IOCPServer] Removed partial game room: " << roomId << std::endl;
             }
+            throw; // allow outer handler to manage notification
         }
         
     } catch (const std::exception& e) {
