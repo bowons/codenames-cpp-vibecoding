@@ -314,7 +314,7 @@ void IOCPClient::WorkerThread() {
             
         } else if (context->operation == 1) {  // SEND 완료
             // 전송 완료 처리
-            std::cout << "Send completed: " << byteTransferred << " bytes" << std::endl;
+            //std::cout << "Send completed: " << byteTransferred << " bytes" << std::endl;
 
             // 전송 컨텍스트 정리
             delete context;

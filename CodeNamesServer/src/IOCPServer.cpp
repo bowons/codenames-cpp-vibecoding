@@ -114,12 +114,12 @@ void IOCPServer::CreateGameRoom(const std::vector<std::shared_ptr<Session>>& pla
             std::cout << "[IOCPServer] Adding players to GameManager: count=" << players.size() << std::endl;
             for (auto& session : players) {
                 if (session && !session->IsClosed()) {
-                    gmPtr->AddPlayer(session.get(), session->GetUserName(), session->GetToken());
+                    gmPtr->AddPlayer(session.get(), session->GetNickname(), session->GetToken());
                     session->SetGameManager(gmPtr);
                     session->SetState(SessionState::IN_GAME);
                     session->SetInMatchingQueue(false);
 
-                    std::cout << "플레이어 게임 추가: " << session->GetUserName() << std::endl;
+                    std::cout << "플레이어 게임 추가: " << session->GetNickname() << std::endl;
                 }
             }
 

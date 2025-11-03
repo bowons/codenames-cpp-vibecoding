@@ -91,8 +91,8 @@ public:
 
     // 상태 접근자
     bool IsAuthenticated() const { return !token_.empty(); }
-    const std::string& GetUserName() const { return username_; }
-    void SetUserName(const std::string& name) { username_ = name; }
+    const std::string GetNickname() const { return username_; }
+    void SetNickname(const std::string& name) { username_ = name; }
     void SetToken(const std::string& token) { token_ = token; }
     void SetState(SessionState state) { currentState_ = state; }
 

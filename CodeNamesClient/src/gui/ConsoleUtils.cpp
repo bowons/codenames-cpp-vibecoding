@@ -16,8 +16,14 @@ void ConsoleUtils::Initialize() {
     consoleHandle_ = GetStdHandle(STD_OUTPUT_HANDLE);
     GetConsoleScreenBufferInfo(consoleHandle_, &consoleInfo_);
     
+    // 한글 입출력을 위한 코드 페이지 설정 (UTF-8)
+    SetConsoleCP(CP_UTF8);
+    SetConsoleOutputCP(CP_UTF8);
+    
     // 콘솔 모드 설정
     SetConsoleMode(consoleHandle_, ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+    
+    // 참고: 창 크기는 사용자가 수동으로 조정해야 합니다 (최소 150x40 권장)
 }
 
 void ConsoleUtils::Cleanup() {
@@ -32,10 +38,23 @@ void ConsoleUtils::Clear() {
     DWORD count;
     GetConsoleScreenBufferInfo(consoleHandle_, &consoleInfo_);
     
+    // 화면을 완전히 지우기
+    DWORD cellCount = consoleInfo_.dwSize.X * consoleInfo_.dwSize.Y;
+    
+    // 문자 지우기
     FillConsoleOutputCharacter(
         consoleHandle_,
         ' ',
-        consoleInfo_.dwSize.X * consoleInfo_.dwSize.Y,
+        cellCount,
+        coord,
+        &count
+    );
+    
+    // 속성도 초기화
+    FillConsoleOutputAttribute(
+        consoleHandle_,
+        consoleInfo_.wAttributes,
+        cellCount,
         coord,
         &count
     );

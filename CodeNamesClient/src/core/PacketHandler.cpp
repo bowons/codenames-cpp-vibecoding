@@ -54,6 +54,7 @@ void PacketHandler::RegisterDefaultHandlers() {
     RegisterHandler(PKT_HINT_MSG, [this](const std::string& data) { HandleHintMsg(data); });
     RegisterHandler(PKT_CARD_UPDATE, [this](const std::string& data) { HandleCardUpdate(data); });
     RegisterHandler(PKT_CHAT_MSG, [this](const std::string& data) { HandleChatMsg(data); });
+    RegisterHandler(PKT_GAME_OVER, [this](const std::string& data) { HandleGameOver(data); });
 
     // 기타
     RegisterHandler(PKT_ERROR, [this](const std::string& data) { HandleError(data); });
@@ -186,9 +187,16 @@ void PacketHandler::HandleQueueFull(const std::string& data) {
 
 void PacketHandler::HandleGameInit(const std::string& data) {
     // GAME_INIT|nick1|role1|team1|leader1|nick2|role2|team2|leader2|...
+    Logger::Info(std::string("HandleGameInit received: ") + data);
+    
     std::vector<Player> players;
     
-    for (int i = 0; i < 4; ++i) {
+    // 자신의 닉네임을 가져옴 (GameState에 저장된 username 사용)
+    std::string myNickname = gameState_->username;
+    Logger::Info(std::string("Looking for my nickname: '") + myNickname + "'");
+    int myIndex = -1;
+    
+    for (int i = 0; i < 6; ++i) {  // Original C 버전은 6명까지 지원
         int baseField = i * 4;
         std::string nick = ParseField(data, baseField, "|");
         std::string roleStr = ParseField(data, baseField + 1, "|");
@@ -203,7 +211,29 @@ void PacketHandler::HandleGameInit(const std::string& data) {
             p.isLeader = (std::stoi(leaderStr) == 1);
             p.isReady = false;
             players.push_back(p);
+            
+            Logger::Info(std::string("Player ") + std::to_string(i) + ": '" + nick + 
+                        "', team=" + teamStr + ", leader=" + leaderStr);
+            
+            // 자신의 닉네임과 매칭되면 myPlayerIndex 설정
+            if (nick == myNickname) {
+                myIndex = i;
+                Logger::Info(std::string("*** MATCH FOUND at index ") + std::to_string(i) + " ***");
+            }
         }
+    }
+    
+    // myPlayerIndex와 관련 정보 설정
+    if (myIndex >= 0 && myIndex < static_cast<int>(players.size())) {
+        gameState_->myPlayerIndex = myIndex;
+        gameState_->myTeam = players[myIndex].team;
+        gameState_->isMyLeader = players[myIndex].isLeader;
+        
+        Logger::Info(std::string("==> Game initialized - My index: ") + std::to_string(myIndex) + 
+                     ", Team: " + std::to_string(gameState_->myTeam) + 
+                     ", Leader: " + (gameState_->isMyLeader ? "Yes" : "No"));
+    } else {
+        Logger::Warn(std::string("!!! Could not find my player index for nickname: '") + myNickname + "' !!!");
     }
     
     gameState_->UpdatePlayers(players);
@@ -222,6 +252,8 @@ void PacketHandler::HandleGameStart(const std::string& data) {
 
 void PacketHandler::HandleAllCards(const std::string& data) {
     // ALL_CARDS|word1|type1|isUsed1|word2|type2|isUsed2|...
+    Logger::Info(std::string("ALL_CARDS received - parsing..."));
+    
     std::vector<GameCard> cards;
     
     for (int i = 0; i < 25; ++i) {
@@ -236,6 +268,13 @@ void PacketHandler::HandleAllCards(const std::string& data) {
             c.cardType = std::stoi(typeStr);
             c.isRevealed = (std::stoi(usedStr) == 1);
             cards.push_back(c);
+            
+            // 디버깅: revealed 카드 로그
+            if (c.isRevealed) {
+                Logger::Info(std::string("Card[") + std::to_string(i) + 
+                            "] is already revealed: " + c.word + 
+                            " (type=" + std::to_string(c.cardType) + ")");
+            }
         }
     }
 
@@ -245,13 +284,22 @@ void PacketHandler::HandleAllCards(const std::string& data) {
 
 void PacketHandler::HandleRoleInfo(const std::string& data) {
     // ROLE_INFO|roleNumber (0-3)
+    // 이 패킷은 GAME_INIT 이후에 오므로, 이미 설정된 정보와 일치하는지 검증
     std::string roleStr = ParseField(data, 0, "|");
     if (!roleStr.empty()) {
         int role = std::stoi(roleStr);
         gameState_->myRole = role;
-        gameState_->isMyLeader = (role == 0 || role == 2);  // 0, 2는 리더
-        gameState_->myTeam = (role < 2) ? 0 : 1;  // 0,1은 팀0, 2,3은 팀1
-        Logger::Info(std::string("My role: ") + std::to_string(role));
+        
+        // GAME_INIT에서 이미 설정되었지만, 백업으로 다시 설정
+        // (만약 GAME_INIT에서 myPlayerIndex를 찾지 못한 경우를 대비)
+        if (gameState_->myPlayerIndex == -1) {
+            gameState_->isMyLeader = (role == 0 || role == 2);  // 0, 2는 리더
+            gameState_->myTeam = (role < 2) ? 0 : 1;  // 0,1은 팀0, 2,3은 팀1
+            Logger::Warn(std::string("Using ROLE_INFO as fallback - Role: ") + std::to_string(role));
+        } else {
+            Logger::Info(std::string("ROLE_INFO received - Role: ") + std::to_string(role) + 
+                        " (already set from GAME_INIT)");
+        }
     }
 }
 
@@ -263,8 +311,8 @@ void PacketHandler::HandleTurnUpdate(const std::string& data) {
     std::string blueStr = ParseField(data, 3, "|");
     
     if (!teamStr.empty() && !redStr.empty() && !blueStr.empty()) {
-    gameState_->SetTurn(std::stoi(teamStr));
-    gameState_->inGameStep = std::stoi(phaseStr);
+        gameState_->inGameStep = std::stoi(phaseStr);
+        gameState_->SetTurn(std::stoi(teamStr));
         gameState_->UpdateScore(std::stoi(redStr), std::stoi(blueStr));
     }
 }
@@ -276,20 +324,35 @@ void PacketHandler::HandleHintMsg(const std::string& data) {
     std::string countStr = ParseField(data, 2, "|");
     
     if (!word.empty() && !countStr.empty()) {
-        gameState_->SetHint(word, std::stoi(countStr));
+        int count = std::stoi(countStr);
+        gameState_->SetHint(word, count);
+        gameState_->remainingTries = count;  // 남은 시도 횟수 초기화
         Logger::Info(std::string("Hint received: ") + word + " (" + countStr + ")");
     }
 }
 
 void PacketHandler::HandleCardUpdate(const std::string& data) {
-    // CARD_UPDATE|cardIndex|isUsed
+    // CARD_UPDATE|cardIndex|isUsed|remainingTries
     std::string indexStr = ParseField(data, 0, "|");
     std::string usedStr = ParseField(data, 1, "|");
+    std::string triesStr = ParseField(data, 2, "|");
+    
+    Logger::Info(std::string("CARD_UPDATE received: ") + data);
     
     if (!indexStr.empty()) {
         int index = std::stoi(indexStr);
+        int isUsed = usedStr.empty() ? 0 : std::stoi(usedStr);
+        
         gameState_->RevealCard(index);
-        Logger::Info(std::string("Card revealed: ") + std::to_string(index));
+        
+        // remainingTries 업데이트 (서버에서 전송)
+        if (!triesStr.empty()) {
+            gameState_->remainingTries = std::stoi(triesStr);
+            Logger::Info(std::string("Card revealed: ") + std::to_string(index) + 
+                        ", Remaining tries: " + std::to_string(gameState_->remainingTries));
+        } else {
+            Logger::Info(std::string("Card revealed: ") + std::to_string(index));
+        }
     }
 }
 
@@ -308,6 +371,29 @@ void PacketHandler::HandleChatMsg(const std::string& data) {
         
         gameState_->AddMessage(msg);
         Logger::Info(std::string("[") + nickname + "]: " + message);
+    }
+}
+
+void PacketHandler::HandleGameOver(const std::string& data) {
+    // GAME_OVER|winnerTeam (0: RED, 1: BLUE, -1: DRAW)
+    std::string winnerStr = ParseField(data, 0, "|");
+    
+    if (!winnerStr.empty()) {
+        int winner = std::stoi(winnerStr);
+        std::string winnerName = (winner == 0) ? "RED" : 
+                                (winner == 1) ? "BLUE" : "DRAW";
+        
+        Logger::Info(std::string("GAME_OVER - Winner: ") + winnerName);
+        
+        // 게임 오버 메시지 추가
+        GameMessage msg;
+        msg.nickname = "SYSTEM";
+        msg.message = winnerName + " 팀이 승리했습니다! (ESC: 로비로)";
+        msg.team = 2;  // SYSTEM
+        gameState_->AddMessage(msg);
+        
+        // 게임 오버 콜백 호출
+        gameState_->OnGameOver();
     }
 }
 

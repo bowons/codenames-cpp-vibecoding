@@ -46,6 +46,7 @@ private:
     void HandleHintMsg(const std::string& data);
     void HandleCardUpdate(const std::string& data);
     void HandleChatMsg(const std::string& data);
+    void HandleGameOver(const std::string& data);
 
     // 기타
     void HandleError(const std::string& data);

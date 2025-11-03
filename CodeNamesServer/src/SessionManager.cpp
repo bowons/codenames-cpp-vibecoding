@@ -314,7 +314,7 @@ void SessionManager::HandleAuthProtocol(Session* session, const std::string& dat
                 if (result == DatabaseResult::SUCCESS) {
                     std::string token = dbManager->GenerateToken();
                     session->SetToken(token);
-                    session->SetUserName(nick);
+                    session->SetNickname(nick);
                     session->PostSend(std::string(PKT_SIGNUP_OK) + "|" + token);
                 } else if (result == DatabaseResult::NICK_DUPLICATE) {
                     session->PostSend(PKT_SIGNUP_DUPLICATE);
@@ -345,7 +345,7 @@ void SessionManager::HandleAuthProtocol(Session* session, const std::string& dat
                         
                         std::string token = dbManager->GenerateToken();
                         session->SetToken(token);
-                        session->SetUserName(userInfo->nickname);
+                        session->SetNickname(userInfo->nickname);
                         session->PostSend(std::string(PKT_LOGIN_OK) + "|" + token);
                         session->SetState(SessionState::IN_LOBBY);
                     } else {
@@ -371,7 +371,7 @@ void SessionManager::HandleAuthProtocol(Session* session, const std::string& dat
         std::string token = data.substr(std::string(PKT_TOKEN).size() + 1);
 
         if (token == session->GetToken()) {
-            session->PostSend(std::string(PKT_TOKEN_VALID) + "|" + session->GetUserName());
+            session->PostSend(std::string(PKT_TOKEN_VALID) + "|" + session->GetNickname());
         } else {
             session->PostSend(PKT_INVALID_TOKEN);
         }
@@ -385,7 +385,7 @@ void SessionManager::HandleAuthProtocol(Session* session, const std::string& dat
             std::string new_nick = data.substr(pipe_pos + 1);
             
             if (token == session->GetToken()) {
-                session->SetUserName(new_nick);
+                session->SetNickname(new_nick);
                 session->PostSend(PKT_NICKNAME_EDIT_OK);
             } else {
                 session->PostSend(PKT_INVALID_TOKEN);

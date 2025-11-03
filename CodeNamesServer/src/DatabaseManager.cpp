@@ -39,6 +39,25 @@ bool DatabaseManager::Initialize(const std::string& dbPath)
         std::cerr << "데이터베이스 열기 실패: " << sqlite3_errmsg(db_) << std::endl;
         return false;
     }
+    
+    // game_stats 테이블 생성 (없으면)
+    const char* createTableSql = 
+        "CREATE TABLE IF NOT EXISTS game_stats ("
+        "user_id TEXT PRIMARY KEY,"
+        "wins INTEGER DEFAULT 0,"
+        "losses INTEGER DEFAULT 0,"
+        "FOREIGN KEY(user_id) REFERENCES users(id)"
+        ")";
+    
+    char* errMsg = nullptr;
+    if (sqlite3_exec(db_, createTableSql, nullptr, nullptr, &errMsg) != SQLITE_OK) {
+        std::cerr << "game_stats 테이블 생성 실패: " << errMsg << std::endl;
+        sqlite3_free(errMsg);
+        // 실패해도 계속 진행 (테이블이 이미 존재할 수 있음)
+    } else {
+        std::cout << "game_stats 테이블 준비 완료" << std::endl;
+    }
+    
     return true;
 }
 
@@ -475,31 +494,60 @@ int DatabaseManager::GetReportCount(const std::string& id) {
 DatabaseResult DatabaseManager::SaveGameResult(const std::string& nickname, const std::string& result) {
     std::lock_guard<std::mutex> lock(dbMutex_);
 
+    // 1단계: nickname으로 user_id 조회
+    const char* getUserIdSql = "SELECT id FROM users WHERE nickname = ?";
+    sqlite3_stmt* getUserStmt;
+    
+    if (sqlite3_prepare_v2(db_, getUserIdSql, -1, &getUserStmt, nullptr) != SQLITE_OK) {
+        std::cerr << "DB prepare error (get user_id): " << sqlite3_errmsg(db_) << std::endl;
+        return DatabaseResult::DB_ERROR;
+    }
+    
+    sqlite3_bind_text(getUserStmt, 1, nickname.c_str(), -1, SQLITE_STATIC);
+    
+    std::string userId;
+    if (sqlite3_step(getUserStmt) == SQLITE_ROW) {
+        const char* id = (const char*)sqlite3_column_text(getUserStmt, 0);
+        if (id) userId = id;
+    }
+    sqlite3_finalize(getUserStmt);
+    
+    if (userId.empty()) {
+        std::cerr << "User not found: " << nickname << std::endl;
+        return DatabaseResult::NOT_FOUND;
+    }
+    
+    // 2단계: game_stats 테이블에 INSERT or UPDATE (원본 C 코드와 동일)
     const char* sql;
     if (result == "WIN") {
-        sql = "UPDATE users SET wins = wins + 1 WHERE nickname = ?";
+        sql = "INSERT INTO game_stats(user_id, wins, losses) VALUES(?, 1, 0) "
+              "ON CONFLICT(user_id) DO UPDATE SET wins = wins + 1";
     } else if (result == "LOSS") {
-        sql = "UPDATE users SET losses = losses + 1 WHERE nickname = ?";
+        sql = "INSERT INTO game_stats(user_id, wins, losses) VALUES(?, 0, 1) "
+              "ON CONFLICT(user_id) DO UPDATE SET losses = losses + 1";
     } else {
         return DatabaseResult::DB_ERROR;
     }
 
     sqlite3_stmt* stmt;
-
+    
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         std::cerr << "DB prepare error in SaveGameResult: " << sqlite3_errmsg(db_) << std::endl;
         return DatabaseResult::DB_ERROR;
     }
 
-    sqlite3_bind_text(stmt, 1, nickname.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 1, userId.c_str(), -1, SQLITE_STATIC);
 
     int stepResult = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
 
-    if (stepResult == SQLITE_DONE && sqlite3_changes(db_) > 0) {
+    if (stepResult == SQLITE_DONE) {
+        std::cout << "Game result saved: " << nickname << " (" << userId << ") - " << result << std::endl;
         return DatabaseResult::SUCCESS;
     }
-    return DatabaseResult::NOT_FOUND;
+    
+    std::cerr << "DB step error in SaveGameResult: " << sqlite3_errmsg(db_) << std::endl;
+    return DatabaseResult::DB_ERROR;
 }
 
 std::string DatabaseManager::GetNicknameByToken(const std::string& token) {

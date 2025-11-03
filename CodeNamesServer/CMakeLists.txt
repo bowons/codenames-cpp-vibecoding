@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.10)
 # vcpkg integration: toolchain must be set BEFORE project() so CMake uses vcpkg during configuration
 set(CMAKE_TOOLCHAIN_FILE "G:/공부/C++/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
 
-project(CodeNamesServer)
+project(CodeNamesServer LANGUAGES CXX C)
 
 # Export compile_commands.json to help VS Code IntelliSense
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

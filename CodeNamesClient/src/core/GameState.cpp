@@ -12,7 +12,8 @@ GameState::GameState()
     inGameStep(0),
       redScore(0),
       blueScore(0),
-      hintNumber(0) {
+      hintNumber(0),
+      remainingTries(0) {
         matchingCount = 0;
 }
 
@@ -80,8 +81,9 @@ void GameState::SetHint(const std::string& word, int count) {
 void GameState::SetTurn(int team) {
     if (currentTurn != team) {
         currentTurn = team;
-        NotifyTurnChanged();
     }
+
+    NotifyTurnChanged();
 }
 
 void GameState::OnGameOver() {
@@ -162,6 +164,7 @@ void GameState::Reset() {
     blueScore = 0;
     hintWord.clear();
     hintNumber = 0;
+    remainingTries = 0;
     messages.clear();
     matchingCount = 0;
 }

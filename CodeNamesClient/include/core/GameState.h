@@ -81,6 +81,7 @@ public:
     int blueScore;
     std::string hintWord;
     int hintNumber;
+    int remainingTries;
     // 매칭 큐 관련 (서버에서 WAIT_REPLY로 전달되는 대기 인원 정보)
     int matchingCount;
     int matchingMax; // 서버가 알려주는 매칭에 필요한 최대 플레이어 수

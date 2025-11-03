@@ -116,7 +116,10 @@ void GUIManager::SetNetworkClient(std::shared_ptr<IOCPClient> client) {
     client_ = client;
     // Propagate to screens in case they were constructed with a null client
     if (mainScreen_) mainScreen_->SetClient(client_);
-    if (gameScreen_) gameScreen_->SetClient(client_);
+    if (gameScreen_) {
+        gameScreen_->SetClient(client_);
+        gameScreen_->SetPacketHandler(g_packetHandler);  // 패킷 핸들러도 주입
+    }
 }
 
 void GUIManager::LoginSceneLoop() {

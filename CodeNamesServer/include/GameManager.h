@@ -40,8 +40,14 @@ struct GamePlayer {
     PlayerRole role;      // AGENT(0) or SPYMASTER(1)  
     class Session* session;  // 모든 정보는 Session에서 가져옴
 
-    const std::string& GetNickname() const { return session ? session->GetUserName() : ""; }
-    const std::string& GetToken() const { return session ? session->GetToken() : ""; }
+    std::string GetNickname() const { 
+        static const std::string empty = "";
+        return session ? session->GetNickname() : empty; 
+    }
+    std::string GetToken() const { 
+        static const std::string empty = "";
+        return session ? session->GetToken() : empty; 
+    }
 };
 
 // 게임 카드 구조체

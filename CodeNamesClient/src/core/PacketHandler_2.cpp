@@ -251,8 +251,8 @@ void PacketHandler::HandleTurnUpdate(const std::string& data) {
     std::string blueStr = ParseField(data, 3, "|");
     
     if (!teamStr.empty() && !redStr.empty() && !blueStr.empty()) {
-    gameState_->SetTurn(std::stoi(teamStr));
-    gameState_->inGameStep = std::stoi(phaseStr);
+        gameState_->inGameStep = std::stoi(phaseStr);
+        gameState_->SetTurn(std::stoi(teamStr));
         gameState_->UpdateScore(std::stoi(redStr), std::stoi(blueStr));
     }
 }

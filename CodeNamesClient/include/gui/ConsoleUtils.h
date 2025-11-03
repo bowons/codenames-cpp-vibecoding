@@ -14,7 +14,8 @@ enum class ConsoleColor {
     RED = 4,
     MAGENTA = 5,
     YELLOW = 6,
-    WHITE = 7
+    WHITE = 7,
+    GRAY = 8   // 어두운 회색
 };
 
 // ==================== 콘솔 유틸리티 ====================

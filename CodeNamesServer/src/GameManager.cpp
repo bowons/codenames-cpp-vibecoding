@@ -67,6 +67,13 @@ bool GameManager::AddPlayer(Session* session, const std::string& nickname, const
         return false;
     }
 
+    std::cout << "[" << roomId_ << "] AddPlayer 호출:" << std::endl;
+    std::cout << "  Session: " << (void*)session << std::endl;
+    std::cout << "  Nickname (param): '" << nickname << "'" << std::endl;
+    std::cout << "  Token (param): '" << token << "'" << std::endl;
+    std::cout << "  Session->GetNickname(): '" << session->GetNickname() << "'" << std::endl;
+    std::cout << "  Session->GetToken(): '" << session->GetToken() << "'" << std::endl;
+
     // 빈 슬롯 찾기
     for (int i = 0; i < MAX_PLAYERS; ++i) {
         if (players_[i].session == nullptr) {
@@ -77,6 +84,7 @@ bool GameManager::AddPlayer(Session* session, const std::string& nickname, const
                      << " (슬롯 " << i 
                      << ", 팀: " << (players_[i].team == Team::RED ? "RED" : "BLUE")
                      << ", 역할: " << (players_[i].role == PlayerRole::SPYMASTER ? "SPYMASTER" : "AGENT")
+                     << ", Session Nickname: '" << session->GetNickname() << "'"
                      << ")" << std::endl;
             return true;
         }
@@ -90,7 +98,7 @@ void GameManager::RemovePlayer(const std::string& nickname) {
     std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
     for (int i = 0; i < MAX_PLAYERS; ++i) {
-        if (players_[i].session && players_[i].session->GetUserName() == nickname) {
+        if (players_[i].session && players_[i].session->GetNickname() == nickname) {
             std::cout << "플레이어 제거: " << nickname << " (슬롯 " << i << ")" << std::endl;
             players_[i].session->SetGameManager(nullptr);
             players_[i].session->SetState(SessionState::IN_LOBBY);
@@ -103,7 +111,7 @@ void GameManager::RemovePlayer(const std::string& nickname) {
 
 GamePlayer* GameManager::GetPlayer(const std::string& nickname) {
     for (int i = 0; i < MAX_PLAYERS; ++i) {
-        if (players_[i].session && players_[i].session->GetUserName() == nickname) {
+        if (players_[i].session && players_[i].session->GetNickname() == nickname) {
             return &players_[i];
         }
     }
@@ -133,7 +141,7 @@ size_t GameManager::GetPlayerCount() const {
 int GameManager::FindPlayerIndex(const std::string& nickname) {
     for (int i = 0; i < MAX_PLAYERS; ++i) {
         if (players_[i].session && 
-            players_[i].session->GetUserName() == nickname) {
+            players_[i].session->GetNickname() == nickname) {
             return i;
         }
     }
@@ -275,7 +283,7 @@ void GameManager::SendAllCards(Session* session) {
 
     if (session && !session->IsClosed()) {
         session->PostSend(cardsMsg);
-        std::cout << "[" << roomId_ << "] 모든 카드 정보 전송 to " << session->GetUserName() << "[" << cardsMsg << "]" << std::endl;
+        std::cout << "[" << roomId_ << "] 모든 카드 정보 전송 to " << session->GetNickname() << "[" << cardsMsg << "]" << std::endl;
     } else {
         std::cout << "[" << roomId_ << "] ALL_CARDS skipped for closed/null session" << std::endl;
     }
@@ -294,12 +302,14 @@ void GameManager::SendCardUpdate(int cardIndex) {
 
     std::lock_guard<std::recursive_mutex> lock(gameMutex_);
 
+    // CARD_UPDATE|cardIndex|isUsed|remainingTries 형식으로 전송
     std::string updateMsg = std::string(PKT_CARD_UPDATE) + "|" + std::to_string(cardIndex) +
-                            "|" + std::to_string(cards_[cardIndex].isUsed ? 1 : 0);
+                            "|" + std::to_string(cards_[cardIndex].isUsed ? 1 : 0) +
+                            "|" + std::to_string(remainingTries_);
 
     BroadcastToAll(updateMsg);
     std::cout << "[" << roomId_ << "] 카드 업데이트: " << cardIndex 
-              << " (" << cards_[cardIndex].word << ")" << std::endl;
+              << " (" << cards_[cardIndex].word << "), 남은 시도: " << remainingTries_ << std::endl;
 }
 
 void GameManager::BroadcastToAll(const std::string& message) {
@@ -345,24 +355,57 @@ void GameManager::SendGameState() {
 }
 
 std::string GameManager::CreateGameInitMessage() {
-    std::string msg = std::string(PKT_GAME_INIT);
+    try {
+        std::string msg = std::string(PKT_GAME_INIT);
 
-    for (int i = 0; i < MAX_PLAYERS; ++i) {
-        if (players_[i].session) {
-            std::string entry = "|" + players_[i].GetNickname() +
-                                "|" + std::to_string((int)players_[i].role) +
-                                "|" + std::to_string((int)players_[i].team) +
-                                "|" + (players_[i].role == PlayerRole::SPYMASTER ? "1" : "0");  
-            msg += entry;
-        } else {
-            std::string entry = "|" + std::string(PKT_EMPTY) + "|" + std::to_string(i) + 
-                               "|" + std::to_string((i < 3) ? 0 : 1) +
-                               "|" + std::to_string((i == 0 || i == 3) ? 1 : 0);
-            msg += entry;
+        std::cout << "[" << roomId_ << "] CreateGameInitMessage - 플레이어 목록:" << std::endl;
+
+        for (int i = 0; i < MAX_PLAYERS; ++i) {
+            if (players_[i].session) {
+                std::string nickname;
+                try {
+                    // 직접 세션의 GetNickname() 호출하여 디버깅
+                    Session* sess = players_[i].session;
+                    std::cout << "  [" << i << "] Session pointer: " << (void*)sess << std::endl;
+                    std::cout << "  [" << i << "] Calling GetNickname()..." << std::endl;
+                    nickname = sess->GetNickname();
+                    std::cout << "  [" << i << "] GetNickname() returned: '" << nickname << "'" << std::endl;
+                } catch (...) {
+                    nickname = "ERROR";
+                    std::cerr << "  [" << i << "] GetNickname() failed!" << std::endl;
+                }
+                
+                // Original C 버전과 동일하게 role_num (플레이어 인덱스 0~5), team, is_leader 전송
+                int roleNum = players_[i].roleNum;  // 플레이어 인덱스 (0~5)
+                int teamNum = static_cast<int>(players_[i].team);
+                std::string isLeader = (players_[i].role == PlayerRole::SPYMASTER) ? "1" : "0";
+                
+                std::cout << "  [" << i << "] Session: " << (void*)players_[i].session 
+                         << ", Nickname: '" << nickname << "'"
+                         << ", RoleNum: " << roleNum
+                         << ", Team: " << teamNum 
+                         << ", Leader: " << isLeader << std::endl;
+                
+                std::string entry = "|" + nickname +
+                                    "|" + std::to_string(roleNum) +
+                                    "|" + std::to_string(teamNum) +
+                                    "|" + isLeader;
+                msg += entry;
+            } else {
+                std::cout << "  [" << i << "] Empty slot" << std::endl;
+                std::string entry = "|" + std::string(PKT_EMPTY) + "|" + std::to_string(i) + 
+                                   "|" + std::to_string((i < 3) ? 0 : 1) +
+                                   "|" + std::to_string((i == 0 || i == 3) ? 1 : 0);
+                msg += entry;
+            }
         }
-    }
 
-    return msg;
+        std::cout << "[" << roomId_ << "] GAME_INIT 메시지: " << msg << std::endl;
+        return msg;
+    } catch (const std::exception& e) {
+        std::cerr << "[" << roomId_ << "] CreateGameInitMessage exception: " << e.what() << std::endl;
+        throw;
+    }
 }
 
 void GameManager::BroadcastToTeam(Team team, const std::string& message) {
@@ -461,7 +504,6 @@ bool GameManager::ProcessAnswer(int playerIndex, const std::string& word) {
     cards_[cardIndex].isUsed = true;
     CardType cardType = cards_[cardIndex].type;
 
-    SendCardUpdate(cardIndex);
     std::string playerName = players_[playerIndex].GetNickname();
 
     bool turnEnds = false;
@@ -489,18 +531,16 @@ bool GameManager::ProcessAnswer(int playerIndex, const std::string& word) {
             chatMsg = std::string(PKT_CHAT) + "|2|0|시스템|" + playerName + "님이 BLUE 카드를 선택! 턴 종료.";
         }
     } else if (cardType == CardType::NEUTRAL) {
-        if (currentTurn_ == Team::RED) {
-            blueScore_++;
-            chatMsg = std::string(PKT_CHAT) + "|2|0|시스템|" + playerName + "님이 중립 카드를 선택! BLUE팀 +1점, 턴 종료.";
-        } else {
-            redScore_++;
-            chatMsg = std::string(PKT_CHAT) + "|2|0|시스템|" + playerName + "님이 중립 카드를 선택! RED팀 +1점, 턴 종료.";
-        }
+        // 중립 카드 선택 시 점수 변화 없이 턴만 종료 (코드네임 규칙)
+        chatMsg = std::string(PKT_CHAT) + "|2|0|시스템|" + playerName + "님이 중립 카드를 선택! 턴 종료.";
         turnEnds = true;
     } else if (cardType == CardType::ASSASSIN) {
         gameEnds = true;
-    chatMsg = std::string(PKT_CHAT) + "|2|0|시스템|" + playerName + "님이 암살자를 선택! 게임 종료.";
+        chatMsg = std::string(PKT_CHAT) + "|2|0|시스템|" + playerName + "님이 암살자를 선택! 게임 종료.";
     }
+    
+    // remainingTries 계산 후 CARD_UPDATE 전송
+    SendCardUpdate(cardIndex);
     BroadcastToAll(chatMsg);
 
     Team winner = CheckWinner();
@@ -511,7 +551,13 @@ bool GameManager::ProcessAnswer(int playerIndex, const std::string& word) {
         } else {
             EndGame(winner);
         }
+        return true;
     }
+
+    if (turnEnds)
+        SwitchTurn();
+    
+    return true;
 }
 
 bool GameManager::ProcessChat(int playerIndex, const std::string &message)
@@ -524,19 +570,24 @@ bool GameManager::ProcessChat(int playerIndex, const std::string &message)
     if (players_[playerIndex].session->IsClosed()) return false;
     if (message.empty()) return false;
 
-    std::string playerName = players_[playerIndex].GetNickname();
-    Team playerTeam = players_[playerIndex].team;
+    try {
+        std::string playerName = players_[playerIndex].GetNickname();
+        Team playerTeam = players_[playerIndex].team;
 
         std::string chatMsg = std::string(PKT_CHAT) + "|" + 
-                             std::to_string((int)playerTeam) + "|" + 
-                             std::to_string(playerIndex) + "|" + 
-                             playerName + "|" + 
-                             message;
+                            std::to_string((int)playerTeam) + "|" + 
+                            std::to_string(playerIndex) + "|" + 
+                            playerName + "|" + 
+                            message;
 
-    BroadcastToAll(chatMsg);
+        BroadcastToAll(chatMsg);
 
-    std::cout << "[" << roomId_ << "] 채팅 from " << playerName << ": " << message << std::endl;
-    return false;
+        std::cout << "[" << roomId_ << "] 채팅 from " << playerName << ": " << message << std::endl;
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "[" << roomId_ << "] ProcessChat exception: " << e.what() << std::endl;
+        return false;
+    }
 }
 
 Team GameManager::CheckWinner() {
@@ -606,9 +657,9 @@ void GameManager::HandleGamePacket(Session* session, const std::string& data)
         return;
     }
 
-    int playerIndex = FindPlayerIndex(session->GetUserName());
+    int playerIndex = FindPlayerIndex(session->GetNickname());
     if (playerIndex == -1) {
-        std::cerr << "HandleGamePacket: 플레이어 인덱스를 찾을 수 없음: " << session->GetUserName() << std::endl;
+        std::cerr << "HandleGamePacket: 플레이어 인덱스를 찾을 수 없음: " << session->GetNickname() << std::endl;
         return;
     }
     
